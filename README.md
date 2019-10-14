@@ -1,5 +1,7 @@
 ![Haskell-Torch Logo](https://github.com/abarbu/haskell-torch/blob/master/logo-with-text.png)
 
+[![Build Status](https://img.shields.io/circleci/project/github/abarbu/haskell-torch.svg)](https://circleci.com/gh/abarbu/haskell-torch)
+
 ## Haskell-Torch
 
 *If you've manged to find this package, you should ignore it for now. We'll have an official release in a week or two!*
