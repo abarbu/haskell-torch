@@ -1,0 +1,42 @@
+name: interpolateIO
+version: 0.2.0
+category: Data, Text
+stability: experimental
+synopsis: String interpolation in IO based on interpolate
+description: String interpolation in IO based on interpolate
+license: MIT
+copyright: (c) 2018 Andrei Barbu, 2013-2015 Simon Hengel
+author: Andrei Barbu <andrei@0xab.com>
+maintainer: Andrei Barbu <andrei@0xab.com>
+
+github: abarbu/interpolateIO
+
+ghc-options: -Wall
+
+dependencies:
+  - base == 4.*
+  - template-haskell
+  - haskell-src-meta >= 0.8
+  - generics-eot
+
+source-dirs: src
+
+library:
+  exposed-modules:
+    - Data.String.InterpolateIO
+    - Data.String.InterpolateIO.IsString
+    - Data.String.InterpolateIO.Util
+    - Data.String.InterpolateIO.Internal.Util
+    - Data.String.ShowIO
+
+tests:
+  spec:
+    source-dirs: test
+    main: Spec.hs
+    dependencies:
+      - text
+      - bytestring
+      - hspec >= 1.5
+      - QuickCheck
+      - quickcheck-instances
+      - base-compat

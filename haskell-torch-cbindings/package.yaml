@@ -1,0 +1,42 @@
+name:                haskell-torch-cbindings
+version:             0.8.0.0
+github:              "abarbu/haskell-torch"
+license:             BSD3
+author:              "Andrei Barbu"
+maintainer:          "andrei@0xab.com"
+copyright:           "2018 Andrei Barbu"
+homepage:            https://github.com/abarbu/haskell-torch
+bug-reports:         https://github.com/abarbu/haskell-torch/issues
+category:            AI
+synopsis:            Bindings to the C PyTorch library for Haskell-Torch
+
+extra-source-files:
+- README.md
+
+description:         Please see the README on Github at <https://github.com/abarbu/haskell-torch#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+_config: !include "../config.yaml"
+
+library:
+  <<: *pytorchdefaults
+  source-dirs: src
+  dependencies:
+    - inline-c
+    - inline-c-cpp
+    - template-haskell
+    - containers
+    - text
+    - bytestring
+    - half
+    - vector
+    - extra
+    - ieee754
+
+flags:
+  cuda:
+    description: If your pytorch is CUDA-enabled, you can set this
+    manual: true
+    default: false

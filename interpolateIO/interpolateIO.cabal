@@ -1,0 +1,81 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.1.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 9446b16930763d30ef397e2d48f1e06d77b41005867a420a38d4bca2798f56bc
+
+name:           interpolateIO
+version:        0.2.0
+synopsis:       String interpolation in IO based on interpolate
+description:    String interpolation in IO based on interpolate
+category:       Data, Text
+stability:      experimental
+homepage:       https://github.com/abarbu/interpolateIO#readme
+bug-reports:    https://github.com/abarbu/interpolateIO/issues
+author:         Andrei Barbu <andrei@0xab.com>
+maintainer:     Andrei Barbu <andrei@0xab.com>
+copyright:      (c) 2018 Andrei Barbu, 2013-2015 Simon Hengel
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/abarbu/interpolateIO
+
+library
+  hs-source-dirs:
+      src
+  ghc-options: -Wall
+  build-depends:
+      base ==4.*
+    , generics-eot
+    , haskell-src-meta >=0.8
+    , template-haskell
+  exposed-modules:
+      Data.String.InterpolateIO
+      Data.String.InterpolateIO.IsString
+      Data.String.InterpolateIO.Util
+      Data.String.InterpolateIO.Internal.Util
+      Data.String.ShowIO
+  other-modules:
+      Data.String.InterpolateIO.Compat
+      Data.String.InterpolateIO.Parse
+      Paths_interpolateIO
+  default-language: Haskell2010
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs:
+      src
+      test
+  ghc-options: -Wall
+  build-depends:
+      QuickCheck
+    , base ==4.*
+    , base-compat
+    , bytestring
+    , generics-eot
+    , haskell-src-meta >=0.8
+    , hspec >=1.5
+    , quickcheck-instances
+    , template-haskell
+    , text
+  other-modules:
+      Data.String.InterpolateIO
+      Data.String.InterpolateIO.Compat
+      Data.String.InterpolateIO.Internal.Util
+      Data.String.InterpolateIO.IsString
+      Data.String.InterpolateIO.Parse
+      Data.String.InterpolateIO.Util
+      Data.String.ShowIO
+      Data.String.InterpolateIO.Internal.UtilSpec
+      Data.String.InterpolateIO.IsStringSpec
+      Data.String.InterpolateIO.ParseSpec
+      Data.String.InterpolateIO.UtilSpec
+      Data.String.InterpolateIOSpec
+      Paths_interpolateIO
+  default-language: Haskell2010

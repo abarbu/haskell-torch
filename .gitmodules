@@ -1,0 +1,3 @@
+[submodule "matplotlib-haskell"]
+	path = matplotlib-haskell
+	url = https://github.com/abarbu/matplotlib-haskell

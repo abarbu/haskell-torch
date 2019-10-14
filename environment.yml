@@ -1,0 +1,19 @@
+name: haskell-torch
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - numpy
+  - pytorch=1.2.0
+  - gmp
+  - libmatio
+  - hdf5
+  - imagemagick
+  - libiconv
+  - libpng
+  - matplotlib
+  - tensorboard
+  - tensorflow
+  - python=3.7
+  - cudatoolkit=10.0
+  - torchvision

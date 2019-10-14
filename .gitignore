@@ -1,0 +1,13 @@
+.stack-work/
+config.yaml
+stack.yaml
+confile.makefile
+haskell-torch-cbindings.cabal
+haskell-torch-tools.cabal
+haskell-torch-imagemagick.cabal
+haskell-torch-matio.cabal
+haskell-torch-tensorboard-proto.cabal
+haskell-torch.cabal
+*~
+progress.org
+notes.org

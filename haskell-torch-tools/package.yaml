@@ -1,0 +1,50 @@
+name:                haskell-torch-tools
+version:             0.1.0.0
+github:              "abarbu/haskell-torch/haskell-torch-tools"
+license:             BSD3
+author:              "Andrei Barbu"
+maintainer:          "andrei@0xab.com"
+copyright:           "2018 Andrei Barbu"
+homepage:            https://github.com/abarbu/haskell-torch
+bug-reports:         https://github.com/abarbu/haskell-torch/issues
+category:            AI
+synopsis:            Support tools to generate code for haskell-torch
+
+extra-source-files:
+- README.md
+
+description:         Please see the README on Github at <https://github.com/abarbu/haskell-torch#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+_config: !include "../config.yaml"
+
+executables:
+  haskell-torch-tools-generate-ctensor:
+    main:                GenerateCTensor
+    source-dirs:
+      - app
+      - src
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - inline-c
+    - inline-c-cpp
+    - template-haskell
+    - containers
+    - text
+    - yaml
+    - bytestring
+    - aeson
+    - docopt
+    - extra
+    - directory
+    - filepath
+    - unordered-containers
+    - vector
+    - lens
+    - lens-aeson
+    - stache

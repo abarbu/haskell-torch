@@ -1,0 +1,27 @@
+module Torch(module Torch.Tensor
+            ,module Torch.Types
+            ,module Torch.Optimizer
+            ,module Torch.Indexing
+            ,module Torch.Misc
+            ,module Torch.Operators
+            ,module Torch.Initialization
+            ,module Torch.Inplace
+            ,module Torch.Images
+            ,module Torch.Visualization
+            ,module Torch.Tensorboard
+            ,module Torch.Datasets
+            ,module Torch.StoredModel
+            ) where
+import           Torch.Datasets
+import           Torch.Images
+import           Torch.Indexing
+import           Torch.Initialization
+import           Torch.Inplace
+import           Torch.Misc
+import           Torch.Operators
+import           Torch.Optimizer
+import           Torch.StoredModel
+import           Torch.Tensor
+import           Torch.Tensorboard
+import           Torch.Types
+import           Torch.Visualization

@@ -1,0 +1,45 @@
+name:                haskell-torch-imagemagick
+version:             0.1.0.5
+github:              "abarbu/haskell-torch"
+license:             BSD3
+author:              "Andrei Barbu"
+maintainer:          "andrei@0xab.com"
+copyright:           "2018 Andrei Barbu"
+homepage:            https://github.com/abarbu/haskell-torch
+bug-reports:         https://github.com/abarbu/haskell-torch/issues
+category:            Foreign
+synopsis:            Basic image loading/saving with ImageMagick, minimal bindings for Haskell-Torch
+
+extra-source-files:
+- README.md
+
+description:         Please see the README on Github at <https://github.com/abarbu/haskell-torch#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+_config: !include "../config.yaml"
+
+library:
+  <<: *pytorchdefaults
+  source-dirs: src
+  extra-libraries:
+    - MagickWand-7.Q16HDRI
+    - MagickCore-7.Q16HDRI
+  dependencies:
+    - inline-c
+    - inline-c-cpp
+    - containers
+    - transformers
+    - lifted-base
+    - mtl
+    - text
+    - bytestring
+    - aeson
+    - half
+    - vector
+    - extra
+    - directory
+    - filepath
+    - ieee754
+    - template-haskell
