@@ -20,11 +20,15 @@ fi
 mkdir -p $CONDA_PREFIX/etc/conda/activate.d/
 echo "export OLD_LD_PRELOAD=\$LD_PRELOAD" > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 echo "export LD_PRELOAD=\$LD_PRELOAD:$CONDA_PREFIX/lib/libtinfo.so:$CONDA_PREFIX/lib/libtinfow.so:$CONDA_PREFIX/lib/libmkl_core.so:$CONDA_PREFIX/lib/libmkl_sequential.so" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+echo "export OLD_LD_LIBRARY_PATH=\$LD_LIBRARY_PATH" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:$CONDA_PREFIX/lib" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 chmod a+x $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 
 mkdir -p $CONDA_PREFIX/etc/conda/deactivate.d/
 echo 'export LD_PRELOAD=$OLD_LD_PRELOAD' > $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh
 echo 'unset OLD_LD_PRELOAD' >> $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh
+echo "export LD_LIBRARY_PATH=\$OLD_LD_LIBRARY_PATH" >> $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh
+echo "unset OLD_LD_LIBRARY_PATH" >> $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh
 chmod a+x $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh
 
 # Needed to reload the environment

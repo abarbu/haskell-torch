@@ -80,7 +80,7 @@ packages:
 - haskell-torch-tools
 - haskell-torch-cbindings
 - haskell-torch-imagemagick
-- haskell-tensorboard-proto
+- haskell-torch-tensorboard-proto
 - interpolateIO
 - haskell-torch-matio
 - matplotlib-haskell

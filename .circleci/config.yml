@@ -1,0 +1,73 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: "ubuntu:18.04"
+    steps:
+      - run: apt update
+      - run: apt install -y git
+      - checkout
+      - run:
+          name: System-wide dependencies
+          command: |-
+            DEBIAN_FRONTEND=noninteractive apt-get install -y wget
+      - restore_cache:
+          name: Restore Cached Dependencies
+          keys:
+            - haskell-torch-anaconda-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}
+      - restore_cache:
+          name: Restore Cached Dependencies
+          keys:
+            - haskell-torch-stack-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}
+      - run:
+          name: Get Conda
+          command: |
+            ([ ! -d ~/anaconda ] && wget https://repo.anaconda.com/archive/Anaconda3-2019.07-Linux-x86_64.sh -O ~/anaconda.sh) || echo "Ok"
+      # Not needed with anaconda right now, but miniconda needs it on some platforms
+      # - run:
+      #     name: Workaround for conda bug in some containers
+      #     command: mkdir -p ~/.conda
+      - run:
+          name: Install Conda
+          command: |
+            ([ ! -d ~/anaconda ] && bash ~/anaconda.sh -b -p $HOME/anaconda) || echo "Ok"
+      - run:
+          name: Initialize Conda
+          command: eval "$(~/anaconda/bin/conda shell.bash hook)" && conda init bash
+      - run:
+          name: Install stack
+          command: wget -qO- https://get.haskellstack.org/ | sh
+      - run:
+          name: Set stack up
+          command: stack setup
+      - run:
+          name: Set up package
+          command: eval "$(~/anaconda/bin/conda shell.bash hook)" && bash setup.sh
+      - save_cache:
+          name: Save cache
+          key: haskell-torch-anaconda-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}
+          paths:
+            - "/root/anaconda"
+            - "/root/anaconda.sh"
+            - "/root/.conda"
+            - "/root/.stack"
+            - "/root/.bashrc"
+      - run:
+          name: Build
+          command: |
+            eval "$(~/anaconda/bin/conda shell.bash hook)"
+            conda activate haskell-torch
+            export
+            stack build --fast -j1 haskell-torch
+      - save_cache:
+          name: Save cache
+          key: haskell-torch-stack-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}
+          paths:
+            - "/root/.stack"
+      - run:
+          name: Run tests
+          command: eval "$(~/anaconda/bin/conda shell.bash hook)" && conda activate haskell-torch && stack test --fast -j1 haskell-torch
+      - store_artifacts: # upload build artifact for display in CircleCi
+          # TODO Do something useful
+          path: ~/.local/bin/circleci-demo-haskell-exe
+          destination: haskell-torch-haskell
