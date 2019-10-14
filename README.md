@@ -6,7 +6,12 @@
 
 Practical deep learning in Haskell built on the same C++ foundations as
 PyTorch. Same speed, more safety, comprehensive, lots of pretrained models, and
-it works today.
+it works today. [Check out examples of how to build typesafe CNNs like AlexNet
+and ResNet and language models based on stacked LSTMs, along with GANs and
+VAEs. You'll see how to efficiently stream data to them from datasets like
+MNIST, load pretrained models from PyTorch, transfer weights back to PyTorch,
+use Tensorboard, and everything else you need to write deep learning code in
+Haskell.](https://github.com/abarbu/haskell-torch/tree/master/haskell-torch/src/Torch/Tutorial)
 
 ### Why?
 
