@@ -64,9 +64,11 @@ jobs:
           key: haskell-torch-stack-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}
           paths:
             - "/root/.stack"
-      - run:
-          name: Run tests
-          command: eval "$(~/anaconda/bin/conda shell.bash hook)" && conda activate haskell-torch && stack test --fast -j1 haskell-torch
+      # doctests are too slow for CircleCI :(
+      # TODO Turn the tutorials into end to end tests
+      # - run:
+      #     name: Run tests
+      #     command: eval "$(~/anaconda/bin/conda shell.bash hook)" && conda activate haskell-torch && stack test --fast -j1 haskell-torch
       - store_artifacts: # upload build artifact for display in CircleCi
           # TODO Do something useful
           path: ~/.local/bin/circleci-demo-haskell-exe
