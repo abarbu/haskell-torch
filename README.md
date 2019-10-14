@@ -48,11 +48,7 @@ number larger than 1. These problems can also occur in Haskell and the slowdowns
 on larger machines can be terrible (on a 50 core machine we see a nearly 40x
 slowdown compared to single core performance without this flag!).
 
-Run the setup script and then build with stack
-
-```setup.sh```
-
-Any time you want to build just run:
+After running `setup.sh` you can now build, just remember to also activate the environment.
 
 ```
 conda activate haskell-torch
@@ -60,7 +56,7 @@ stack build haskell-torch
 ```
 
 Since building takes some time and the Haskell code does is not the dominant
-runtime you might instead consider 
+part of the runtime you might instead consider 
 
 ```stack build haskell-torch --fast```
 
