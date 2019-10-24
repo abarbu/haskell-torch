@@ -33,8 +33,8 @@ C.context matioCtx
 
 C.include "<matio.h>"
 
-C.verbatim "void delete_variable(matvar_t* v) { Mat_VarFree(v); }"
-foreign import ccall "&delete_variable" deleteVariable :: FunPtr (Ptr CMatVar -> IO ())
+C.verbatim "void delete_mat_variable(matvar_t* v) { Mat_VarFree(v); }"
+foreign import ccall "&delete_mat_variable" deleteVariable :: FunPtr (Ptr CMatVar -> IO ())
 
 C.verbatim "void delete_matfile(mat_t* mf) { Mat_Close(mf); }"
 foreign import ccall "&delete_matfile" deleteMatfile :: FunPtr (Ptr CMat -> IO ())
