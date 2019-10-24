@@ -14,11 +14,11 @@ jobs:
       - restore_cache:
           name: Restore Cached Dependencies
           keys:
-            - haskell-torch-anaconda-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}
+            - haskell-torch-anaconda-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}-linux
       - restore_cache:
           name: Restore Cached Dependencies
           keys:
-            - haskell-torch-stack-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}
+            - haskell-torch-stack-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}-linux
       - run:
           name: Get Conda
           command: |
@@ -45,13 +45,13 @@ jobs:
           command: eval "$(~/anaconda/bin/conda shell.bash hook)" && bash setup.sh
       - save_cache:
           name: Save cache
-          key: haskell-torch-anaconda-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}
+          key: haskell-torch-anaconda-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}-linux
           paths:
-            - "/root/anaconda"
-            - "/root/anaconda.sh"
-            - "/root/.conda"
-            - "/root/.stack"
-            - "/root/.bashrc"
+            - "~/anaconda"
+            - "~/anaconda.sh"
+            - "~/.conda"
+            - "~/.stack"
+            - "~/.bashrc"
       - run:
           name: Build
           command: |
@@ -61,9 +61,9 @@ jobs:
             stack build --fast -j1 haskell-torch
       - save_cache:
           name: Save cache
-          key: haskell-torch-stack-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}
+          key: haskell-torch-stack-{{ .Branch }}-{{ checksum "environment.yml" }}-{{ checksum "generate-config.py" }}-linux
           paths:
-            - "/root/.stack"
+            - "~/.stack"
       # doctests are too slow for CircleCI :(
       # TODO Turn the tutorials into end to end tests
       # - run:

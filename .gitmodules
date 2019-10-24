@@ -1,3 +1,7 @@
 [submodule "matplotlib-haskell"]
 	path = matplotlib-haskell
 	url = https://github.com/abarbu/matplotlib-haskell
+[submodule "IHaskell"]
+	path = ihaskell
+	url = https://github.com/gibiansky/IHaskell
+        ignore = dirty

@@ -4,7 +4,6 @@ channels:
   - conda-forge
 dependencies:
   # NB tornado<6, required for jupyter, needs python=3.6
-  # This way we don't need separate environments for the two
   - python=3.6
   - pytorch=1.2.0
   - numpy
@@ -19,3 +18,14 @@ dependencies:
   - tensorflow
   - cudatoolkit=10.0
   - torchvision
+  # These are only required for jupyter & IHaskell
+  - jupyter==1.0.0
+  - jupyter_nbextensions_configurator
+  - jupyter_contrib_nbextensions
+  - ipykernel
+  - ipywidgets==7.1.1
+  - jupyter_client==5.2.2
+  - jupyter_console==5.2.0
+  - jupyter_core==4.5.0
+  - tornado<6
+  - jupyterlab
