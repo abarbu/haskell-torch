@@ -48,17 +48,27 @@ number larger than 1. These problems can also occur in Haskell and the slowdowns
 on larger machines can be terrible (on a 50 core machine we see a nearly 40x
 slowdown compared to single core performance without this flag!).
 
-After running `setup.sh` you can now build, just remember to also activate the environment.
+After running `setup.sh` you can now build, just remember to also activate the 
+environment. We've already built for you the first time.
 
 ```
 conda activate haskell-torch
-stack build haskell-torch
+stack build haskell-torch --fast
 ```
 
-Since building takes some time and the Haskell code does is not the dominant
-part of the runtime you might instead consider 
+If you are using Jupyter, build it and start it:
 
-```stack build haskell-torch --fast```
+```
+conda activate haskell-torch
+stack install ihaskell --fast
+stack exec ihaskell -- install --stack
+stack exec jupyter -- notebook
+```
+
+Only the last command is needed in the future.
+
+Since building takes some time and the Haskell code is not the dominant
+part of the runtime, feel free to use `--fast`.
 
 If you have a CUDA-capable setup it will be automatically recognized and CUDA
 support will be enabled. If you change anything about CUDA support you will want
