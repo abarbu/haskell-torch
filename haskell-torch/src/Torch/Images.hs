@@ -140,7 +140,7 @@ rgbTensorToImage :: forall szh szw ty.
 rgbTensorToImage ten = do
   I.initialize
   w <- I.newWand
-  ten' <- view ten
+  ten' <- reshape ten
   ten'' <- t $ sized (size_ @'[3,szh TL.* szw]) ten'
   withDataPtr ten''
     (\ptr len -> I.createImageFromPtr w I.RGB (imageStorageForTensorTy @ty) (demoteN @szw) (demoteN @szh) (coerce ptr))
@@ -155,7 +155,7 @@ greyTensorToImage :: forall szh szw ty.
 greyTensorToImage ten = do
   I.initialize
   w <- I.newWand
-  ten' <- view ten
+  ten' <- reshape ten
   ten'' <- t $ sized (size_ @'[1,szh TL.* szw]) ten'
   withDataPtr ten''
     (\ptr len -> I.createImageFromPtr w I.I (imageStorageForTensorTy @ty) (demoteN @szw) (demoteN @szh) (coerce ptr))
@@ -174,7 +174,7 @@ rgbImageToTensor (Image w) = do
                  I.writeImagePixelsToPtr w I.RGB (imageStorageForTensorTy @ty) (coerce ptr)
                  -- pure ()
               )
-  view =<< t ten
+  reshape =<< t ten
 
 -- | Convert an greyscale, 1-plane, image to a tensor.
 greyImageToTensor :: forall szh szw ty.
@@ -186,17 +186,17 @@ greyImageToTensor (Image w) = do
   ten <- empty
   withDataPtr (sized (size_ @'[szh TL.* szw,1]) ten)
               (\ptr len -> I.writeImagePixelsToPtr w I.I (imageStorageForTensorTy @ty) (coerce ptr))
-  view =<< t ten
+  reshape =<< t ten
 
 -- * Operations on tensors that are images
 
 -- TODO Using the trick for StoredModel parameters, write a generic version of
 -- normalize. Should go elsewhere though to not clutter up this file.
-normalizeGreyImageTensor :: forall ty ki szc szh szw.
-                           Tensor ty ki '[szc]
-                         -> Tensor ty ki '[szc]
-                         -> Tensor ty ki '[szc,szh,szw]
-                         -> IO (Tensor ty ki '[szc,szh,szw])
+normalizeGreyImageTensor :: forall ty ki szh szw.
+                           Tensor ty ki '[1]
+                         -> Tensor ty ki '[1]
+                         -> Tensor ty ki '[1,szh,szw]
+                         -> IO (Tensor ty ki '[1,szh,szw])
 normalizeGreyImageTensor (Tensor mean _) (Tensor std _) (Tensor t _) = do
   t' <- C.clone t
   s <- toCScalar @ty @ki 1
@@ -205,25 +205,67 @@ normalizeGreyImageTensor (Tensor mean _) (Tensor std _) (Tensor t _) = do
   pure $ Tensor t' Nothing
 
 -- TODO Test this normalizeRGBImageTensor
-normalizeRGBImageTensor :: forall ty ki szc szh szw.
-                          Tensor ty ki '[szc]
-                        -> Tensor ty ki '[szc]
-                        -> Tensor ty ki '[szc,szh,szw]
-                        -> IO (Tensor ty ki '[szc,szh,szw])
-normalizeRGBImageTensor (Tensor t _) (Tensor mean _) (Tensor std _) = do
-  t' <- C.clone t
-  s <- toCScalar @ty @ki 1
-  C.sub_ t' mean s
-  C.div_ t' std
-  pure $ Tensor t' Nothing
+-- TODO This should be marked as inplace
+normalizeRGBImageTensor :: forall ty ki szh szw. (Num (TensorTyToHs ty), KnownNat szh, KnownNat szw)
+                        => Tensor ty ki '[3]
+                        -> Tensor ty ki '[3]
+                        -> Tensor ty ki '[3, szh, szw]
+                        -> IO (Tensor ty ki '[3, szh, szw])
+normalizeRGBImageTensor mean std t = do
+  undefined -- FIXME
+  -- t' <- clone t
+  -- sub_ t' =<< expand' @'[3,szh,szw] mean
+  -- div_ t' =<< expand' @'[3,szh,szw] std
+  -- pure t'
+
+    -- • Couldn't match type ‘Case_6989586621680089195
+    --                          '[3]
+    --                          '[3, szh, szw]
+    --                          3
+    --                          '[]
+    --                          szw
+    --                          '[szh, 3]
+    --                          (DefaultEq 3 szw || DefaultEq szw 1)’
+    --                  with ‘'True’
+
+-- normalizeRGBImageTensor :: forall ty ki szc szh szw.
+--                           Tensor ty ki '[szc]
+--                         -> Tensor ty ki '[szc]
+--                         -> Tensor ty ki '[szc,szh,szw]
+--                         -> IO (Tensor ty ki '[szc,szh,szw])
+-- normalizeRGBImageTensor (Tensor t _) (Tensor mean _) (Tensor std _) = do
+--   t' <- C.clone t
+--   s <- toCScalar @ty @ki 1
+--   C.sub_ t' mean s
+--   C.div_ t' std
+--   pure $ Tensor t' Nothing
 
 -- | All standard torchvision models take as input images normalized with the
--- follow function. You must rememebr to use this and to process all of your
+-- following function. You must rememebr to use this and to process all of your
 -- datastreams with it!
+-- TODO This should be marked as inplace
+standardRGBNormalization :: (SingI ty, KnownNat szh, KnownNat szw, Num (TensorTyToHs ty),
+                            V.Storable (TensorTyToHs ty), V.Storable (TensorTyToHsC ty),
+                            Fractional (TensorTyToHsC ty)) =>
+                           Tensor ty 'KCpu '[3, szh, szw] -> IO (Tensor ty 'KCpu '[3, szh, szw])
 standardRGBNormalization t = do
   mean <- fromVector (V.fromList [0.485, 0.456, 0.406])
   std <- fromVector (V.fromList [0.229, 0.224, 0.225])
-  normalizeRGBImageTensor t mean std
+  normalizeRGBImageTensor mean std t
+
+-- | Since torchvision models take as input images normalized with
+-- @standardRGBNormalization@, if we want to view images we have to undo the
+-- normalization. That's what this function does.
+-- https://discuss.pytorch.org/t/simple-way-to-inverse-transform-normalization/4821/8
+-- TODO This should be inplace
+standardRGBDeNormalization :: (SingI ty, KnownNat szh, KnownNat szw, Num (TensorTyToHs ty),
+                            V.Storable (TensorTyToHs ty), V.Storable (TensorTyToHsC ty),
+                            Fractional (TensorTyToHsC ty)) =>
+                           Tensor ty 'KCpu '[3, szh, szw] -> IO (Tensor ty 'KCpu '[3, szh, szw])
+standardRGBDeNormalization t = do
+  mean <- fromVector (V.fromList [-2.12, -2.04, -1.80])
+  std <- fromVector (V.fromList [4.36, 4.46, 4.44])
+  normalizeRGBImageTensor mean std t
 
 -- * Reading and writing tensors to files and buffers
 

@@ -1,27 +1,14 @@
-module Torch(module Torch.Tensor
-            ,module Torch.Types
-            ,module Torch.Optimizer
-            ,module Torch.Indexing
-            ,module Torch.Misc
-            ,module Torch.Operators
-            ,module Torch.Initialization
-            ,module Torch.Inplace
-            ,module Torch.Images
-            ,module Torch.Visualization
-            ,module Torch.Tensorboard
-            ,module Torch.Datasets
-            ,module Torch.StoredModel
-            ) where
-import           Torch.Datasets
-import           Torch.Images
-import           Torch.Indexing
-import           Torch.Initialization
-import           Torch.Inplace
-import           Torch.Misc
-import           Torch.Operators
-import           Torch.Optimizer
-import           Torch.StoredModel
-import           Torch.Tensor
-import           Torch.Tensorboard
-import           Torch.Types
-import           Torch.Visualization
+module Torch(module X) where
+import           Torch.Datasets as X
+import           Torch.Images as X
+import           Torch.Indexing as X
+import           Torch.Initialization as X
+import           Torch.Inplace as X
+import           Torch.Misc as X
+import           Torch.Operators as X
+import           Torch.Optimizer as X
+import           Torch.StoredModel as X
+import           Torch.Tensor as X
+import           Torch.Tensorboard as X
+import           Torch.Types as X
+import           Torch.Visualization as X

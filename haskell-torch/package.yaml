@@ -83,6 +83,7 @@ library:
     - yaml
     - zlib
     - monad-logger
+    - docopt
 
 tests:
   doctest:

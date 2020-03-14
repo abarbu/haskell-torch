@@ -114,6 +114,7 @@ vgg19Features ((w1, w1'), (w2, w2'), (w3, w3', w3'', w3'''), (w4, w4', w4'', w4'
   >=> relu_
   >=> maxPool2d (kernel_ @'(2,2)) (stride_ @'(2,2)) (padding_ @'(0,0)) (dilation_ @'(1,1)) (ceilMode_ @False)
   >=> pure . fst
+  >=> adaptiveAvgPool2d (outFeatures_ @'[7,7])
 
 vgg19Classifier (w1, w2, w3) dataPurpose = do
      linear (inFeatures_ @(512 TL.* 7 TL.* 7)) (outFeatures_ @4096) w1
@@ -126,6 +127,5 @@ vgg19Classifier (w1, w2, w3) dataPurpose = do
 
 vgg19Forward (VGG19Net w1s w2s) dataPurpose = do
      vgg19Features w1s
-  >=> adaptiveAvgPool2d (outFeatures_ @'[7,7])
   >=> flatten
   >=> vgg19Classifier w2s dataPurpose

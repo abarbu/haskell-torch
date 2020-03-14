@@ -14,6 +14,7 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+from recommonmark.parser import CommonMarkParser
 
 # -- Project information -----------------------------------------------------
 
@@ -58,4 +59,8 @@ source_suffix = ['.rst', '.md', '.lhs']
 
 # The master toctree document.
 master_doc = 'index'
+
+source_parsers = {
+    '.lhs': CommonMarkParser,
+}
 

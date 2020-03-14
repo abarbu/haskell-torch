@@ -1,6 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, FlexibleContexts, FlexibleInstances, GADTs, MultiParamTypeClasses   #-}
 {-# LANGUAGE NoStarIsType, OverloadedLabels, OverloadedStrings, PartialTypeSignatures, PolyKinds, RankNTypes, ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications, TypeFamilyDependencies, TypeInType, TypeOperators, UndecidableInstances                            #-}
+{-# LANGUAGE TypeApplications, TypeFamilyDependencies, TypeInType, TypeOperators, UndecidableInstances, IncoherentInstances       #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -Wno-unticked-promoted-constructors -Wno-unused-matches -Wno-type-defaults #-}
 

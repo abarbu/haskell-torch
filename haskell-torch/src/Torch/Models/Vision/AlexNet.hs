@@ -43,7 +43,7 @@ loadAlexNet = do
                         ("classifier.6.weight", "classifier.6.bias")))
   pure a
 
-alexnetFeatures (w1, w2, w3, w4, w5) = do
+alexNetFeatures (w1, w2, w3, w4, w5) =
      conv2d (inChannels_ @3) (outChannels_ @64) (kernel_ @'(11,11)) (stride_ @'(4,4)) (padding_ @'(2,2)) (dilation_ @'(1,1)) (groups_ @1) w1
   >=> relu_
   >=> maxPool2d (kernel_ @'(3,3)) (stride_ @'(2,2)) (padding_ @'(0,0)) (dilation_ @'(1,1)) (ceilMode_ @False)
@@ -61,7 +61,7 @@ alexnetFeatures (w1, w2, w3, w4, w5) = do
   >=> maxPool2d (kernel_ @'(3,3)) (stride_ @'(2,2)) (padding_ @'(0,0)) (dilation_ @'(1,1)) (ceilMode_ @False)
   >=> pure . fst
 
-alexnetClassifier (w1, w2, w3) dataPurpose = do
+alexNetClassifier (w1, w2, w3) dataPurpose =
      dropout 0.5 dataPurpose
   >=> linear (inFeatures_ @(256 TL.* 6 TL.* 6)) (outFeatures_ @4096) w1
   >=> relu_
@@ -70,8 +70,8 @@ alexnetClassifier (w1, w2, w3) dataPurpose = do
   >=> relu_
   >=> linear (inFeatures_ @4096) (outFeatures_ @1000) w3
 
-alexnetForward (AlexNet w1s w2s) dataPurpose = do
-     alexnetFeatures w1s
+alexNetForward (AlexNet w1s w2s) dataPurpose =
+     alexNetFeatures w1s
   >=> adaptiveAvgPool2d (outFeatures_ @'[6,6])
   >=> flatten
-  >=> alexnetClassifier w2s dataPurpose
+  >=> alexNetClassifier w2s dataPurpose

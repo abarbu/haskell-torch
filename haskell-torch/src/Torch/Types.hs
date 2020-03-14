@@ -31,6 +31,7 @@ import           Data.Singletons
 import           Data.Singletons.Prelude      as SP
 import           Data.Singletons.Prelude.List
 import           Data.Singletons.TH
+import           Data.Singletons.Decide
 import           Data.Singletons.TypeLits
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
@@ -53,6 +54,7 @@ import qualified Torch.C.Tensor               as C
 import qualified Torch.C.Types                as C
 import qualified Torch.C.Variable             as C
 import           Torch.Misc
+import           Unsafe.Coerce
 
 -- | The storage typeof the tensor we're dealing with. This will appearat the
 -- type level regularly.
@@ -119,151 +121,143 @@ genSingletons [''TensorType, ''TensorKind]
 singDecideInstances [''TensorType, ''TensorKind]
 
 -- * Many singletons for type-level operations.
+-- $(singletonsOnly [d|
+--   isScalarLike :: [Nat] -> Bool
+--   isScalarLike []    = True
+--   isScalarLike (h:t) = if h == 1 then isScalarLike t else False
+--  |])
 
--- TODO singletons support show in the latest iteration of the library
-$(singletonsOnly [d|
-  broadcastSizes' :: (Num x, Eq x) => [x] -> [x] -> [x]
-  broadcastSizes' [] j' = j'
-  broadcastSizes' i' [] = i'
-  broadcastSizes' i'@(_:_) j'@(_:_) = if i' == j' then
-                                       i' else
-                                       reverse (bd' (reverse i') (reverse j'))
-    where bd' :: (Num x, Eq x) => [x] -> [x] -> [x]
-          bd' [] js = js
-          bd' is [] = is
-          bd' (i:is) (j:js) =
-            if i == j || i == 1 then
-              j : bd' is js else
-              if j == 1 then
-                i : bd' is js else
-                error "Types are not broadcastable" -- TODO ("Types are not broadcastable" ++ "(" ++ show_ i' ++ ", " ++ show_ j' ++ ")")
+  -- isScalarLike (h:t) = product (h:t) == 1
 
-  expandSizes :: (Num x, Eq x) => [x] -> [x] -> [x]
-  expandSizes i' j' = reverse (bd' (reverse i') (reverse j'))
-    where bd' :: (Num x, Eq x) => [x] -> [x] -> [x]
-          bd' [] js = js
-          bd' is [] = is
-          bd' (i:is) (j:js) =
-            if i == j || j == 1 || j == -1 then
-              i : bd' is js else
-              if i == 1 then
-                j : bd' is js else
-                error "Types are not broadcastable" -- ++ "(" ++ show i' ++ ", " ++ show j' ")"
+-- | Are these two shapes expandable?
+type family ExpandTo (a::[Nat]) (b::[Nat]) :: Bool where
+  ExpandTo '[] _         = True
+  ExpandTo _ '[]         = True
+  ExpandTo (i:is) (i:js) = ExpandTo is js
+  ExpandTo (1:is) (_:js) = ExpandTo is js
+  ExpandTo (_:is) (1:js) = ExpandTo is js
+  ExpandTo (_:_)  (_:_)  = False
 
-  expandsTo :: (Num x, Eq x) => [x] -> [x] -> Bool
-  expandsTo i j = bd' (reverse i) (reverse j)
-    where bd' :: (Num x, Eq x) => [x] -> [x] -> Bool
-          bd' [] js = True
-          bd' is [] = True
-          bd' (i:is) (j:js) =
-            if i == j || j == 1 || i == 1 then
-              bd' is js else
-              False
+-- | Remove a dimension
+type family RemoveDimension (a::[Nat]) (b::Nat) :: [Nat] where
+  RemoveDimension '[] 0   = '[]
+  RemoveDimension '[] _   = TypeError (TL.Text "Index out of range for RemoveDimension")
+  RemoveDimension (h:t) 0 = t
+  RemoveDimension (h:t) n = h : RemoveDimension t (n - 1)
 
-  squeeze :: [Nat] -> [Nat]
-  squeeze [] = []
-  squeeze [x] = [x]
-  squeeze l@(_:_:_) = loop l
-   where loop []    = []
-         loop (h:t) = if h == 1 then loop t else h : loop t
+-- | Remove all of the 1 dimensions
+type family Squeeze (a::[Nat]) :: [Nat] where
+  Squeeze '[] = '[]
+  Squeeze '[x] = '[x]
+  Squeeze (1:t) = Squeeze t
+  Squeeze (h:t) = h : Squeeze t
 
-  removeDimension :: [x] -> Nat -> [x]
-  removeDimension [] n = if n == 0 then
-                            [] else
-                            error "Index out of range"
-  removeDimension (h:t) n = if n == 0 then
-                               t else
-                               h : removeDimension t (n - 1)
+type family SameOrScalar (a::[Nat]) (b::[Nat]) :: [Nat] where
+  SameOrScalar '[] x = x
+  SameOrScalar x '[] = x
+  SameOrScalar x x   = x
+  SameOrScalar _   _ = TypeError (TL.Text "Types are not compatible")
 
-  insertIndex :: [x] -> Nat -> x -> [x]
-  insertIndex [] n r = if n == 0 then
-                        [r] else
-                        error "Index too large for insertIndex"
-  insertIndex (h:t) n r = if n == 0 then
-                            (r:h:t) else
-                            h : insertIndex t (n - 1) r
+type family ReplaceLast (a::[Nat]) (b::Nat) :: [Nat] where
+  ReplaceLast '[]   _ = TypeError (TL.Text "Empty list when replacing last item")
+  ReplaceLast '[h]  x = '[x]
+  ReplaceLast (h:t) x = h : ReplaceLast t x
 
-  multiplyIndex :: Num x => [x] -> Nat -> x -> [x]
-  multiplyIndex [] n r = if n == 0 then
-                        [r] else
-                        error "Index too large for multiplyIndex"
-  multiplyIndex (h:t) n r = if n == 0 then
-                            (r*h:t) else
-                            h : insertIndex t (n - 1) r
+type family Conv1DSize (lin::Nat) (kernelSize::Nat) (stride::Nat) (padding::Nat) (dilation::Nat) :: Nat where
+  Conv1DSize lin kernelSize stride padding dilation = (Div (lin + 2 TL.* padding - dilation TL.* (kernelSize - 1) - 1) stride) + 1
 
-  conv1DSize lin kernelSize stride padding dilation = lout
-    where lout = ((lin + 2 * padding - dilation * (kernelSize - 1) - 1) `div` stride) + 1
+type family AvgPool1DSize (lin::Nat) (kernelSize::Nat) (stride::Nat) (padding::Nat) :: Nat where
+  AvgPool1DSize lin kernelSize stride padding = (Div (lin + 2 TL.* padding - kernelSize) stride) + 1
 
-  avgPool1DSize lin kernelSize stride padding = lout
-    where lout = ((lin + 2 * padding - kernelSize) `div` stride) + 1
+type family InsertIndex (l::[Nat]) (dim::Nat) (i::Nat) :: [Nat] where
+  InsertIndex '[] 0 i   = '[i]
+  InsertIndex '[] n _   = TypeError (TL.Text "Index too large for insertIndex")
+  InsertIndex (h:t) 0 i = i:h:t
+  InsertIndex (h:t) n i = h : InsertIndex t (n - 1) i
 
-  sameOrScalar :: [Nat] -> [Nat] -> [Nat]
-  sameOrScalar [] x            = x
-  sameOrScalar x  []           = x
-  sameOrScalar x@(_:_) y@(_:_) = if x == y then x else error "Types not compatible"
+type family MultiplyIndex (l::[Nat]) (dim::Nat) (i::Nat) :: [Nat] where
+  MultiplyIndex '[] 0 i   = '[i]
+  MultiplyIndex '[] n _   = TypeError (TL.Text "Index too large for insertIndex")
+  MultiplyIndex (h:t) 0 i = i TL.* h : t
+  MultiplyIndex (h:t) n i = h : MultiplyIndex t (n - 1) i
 
-  replaceLast :: [Nat] -> Nat -> [Nat]
-  replaceLast [] x = error "Empty list when replacing last item"
-  replaceLast (h:t) x = case t of
-     []    -> [x]
-     (_:_) -> h : replaceLast t x
+-- TODO Rename me when time comes
+type family ReplaceDimension (a::[Nat]) (dim::Nat) (b::Nat) :: [Nat] where
+  ReplaceDimension '[]  0 x = '[x] -- TODO Is this Kosher? Should it fail?
+  ReplaceDimension (h:t) 0 x = x : t
+  ReplaceDimension (h:t) n x = h : ReplaceDimension t (n - 1) x
 
-  innerDimensions [] a = error "Empty inner dimensions!"
-  innerDimensions a [] = error "Empty inner dimensions!"
-  innerDimensions (xh:xt) (yh:yt) = case xt of
-     []    -> yt
-     (_:_) -> xh : innerDimensions xt (yh:yt)
-
-  replaceDimension :: [x] -> Nat -> x -> [x]
-  replaceDimension [] _ v = []
-  replaceDimension (h:t) n v = if n == 0 then
-                             v : t else
-                             h : replaceDimension t (n - 1) v
-
-  lengthRemaining :: [Nat] -> Nat -> Nat -> Nat
-  lengthRemaining l i start = (l !! i) - start
-
-  narrow :: [Nat] -> Nat -> Nat -> Nat -> [Nat]
-  narrow l d start len =
-     if d >= length l then
-       error "dimension too large when narrowing" else
-       if l !! d < start + len then
-       error "start + length is larger than the size of the tensor" else
-       if len < 1 then
-          error "length must be larger than 1" else
-          replaceDimension l d len
-
-  cat2 :: [Nat] -> [Nat] -> Nat -> [Nat]
-  cat2 [] [] _ = error "Can't cat two scalars"
-  cat2 a@(_:_) b@(_:_) i =
-      if length a /= length b then
-        error "tensors must have the same number of dimensions" else
-        let a' = replaceDimension a i ((a !! i) + (b !! i))
-            b' = replaceDimension b i ((a !! i) + (b !! i))
-        in if a' == b' then
-             a' else
-             error "tensors must agree in dimensions that are not being concatenated"
-
-  swap :: [Nat] -> Nat -> Nat -> [Nat]
-  swap l i j = replaceDimension (replaceDimension l i j') j i'
-    where i' = l !! i
-          j' = l !! j
-
-  gridRows :: Nat -> Nat -> Nat
-  gridRows imagesPerRow images = (div images imagesPerRow) + (if mod images imagesPerRow == 0 then 0 else 1)
-
-  isScalarLike :: [Nat] -> Bool
-  isScalarLike []    = True
-  isScalarLike (h:t) = product (h:t) == 1
-
-  divRoundUp :: Nat -> Nat -> Nat
-  divRoundUp a b = (a + b - 1) `div` b
-  |])
+type family LengthRemaining (l::[Nat]) (i::Nat) (start::Nat) :: Nat where
+  LengthRemaining l i start = SelectIndex l i - start
 
 -- | Is a list null?
 type family NonNull (a :: [Nat]) :: Bool where
   NonNull '[] = False
   NonNull _   = True
+
+type family Narrow (l::[Nat]) (dim::Nat) (start::Nat) (len::Nat) where
+  Narrow l dim start len = ReplaceDimension l dim len
+
+-- TODO
+  -- ErrorWhen (dim >= Length l)
+  --                              (TL.Text "Dimension too large when narrowing")
+  --                              (ErrorWhen (SelectDimension l dim < start + len)
+  --                               (TL.Text "start + length is larger than the size of the tensor")
+  --                               (ErrorWhen (len < 1)
+  --                                 (TL.Text "length must be larger than 1")
+  --                                 (ReplaceDimension l dim len)))
+
+type family ErrorWhen (b::Bool) (s::ErrorMessage) ok where
+  ErrorWhen True em _  = TypeError em
+  ErrorWhen False _ ok = ok
+
+type family IsScalarLike (l::[Nat]) :: Bool where
+  IsScalarLike '[]  = True
+  IsScalarLike (1:t) = IsScalarLike t
+  IsScalarLike (n:_) = False
+
+-- TODO This function is a disaster, I don't know how to write it more cleanly
+caseScalar :: forall ty ki (sz :: [Nat]) a.
+             Tensor ty ki sz
+           -> (IsScalarLike sz ~ True => Tensor ty ki sz -> a)
+           -> (Tensor ty ki sz -> a)
+           -> Sing sz
+           -> a
+caseScalar t y n SNil = y t
+caseScalar t y n s =
+  case s %~ SCons (sing :: Sing 1) SNil of
+    Proved Refl -> y t
+    _ -> case s %~ SCons (sing :: Sing 1) (SCons (sing :: Sing 1) SNil) of
+          Proved Refl -> y t
+          _ -> case s %~ SCons (sing :: Sing 1) (SCons (sing :: Sing 1) (SCons (sing :: Sing 1) SNil)) of
+                Proved Refl -> y t
+                _ -> case s %~ SCons (sing :: Sing 1) (SCons (sing :: Sing 1) (SCons (sing :: Sing 1) (SCons (sing :: Sing 1) SNil))) of
+                      Proved Refl -> y t
+                      _ -> case s %~ SCons (sing :: Sing 1) (SCons (sing :: Sing 1)
+                                                            (SCons (sing :: Sing 1)
+                                                             (SCons (sing :: Sing 1)
+                                                              (SCons (sing :: Sing 1) SNil)))) of
+                            Proved Refl -> y t
+                            _ -> n t
+
+type family DivRoundUp (a::Nat) (b::Nat) :: Nat where
+  DivRoundUp a b = Div (a + b - 1) b
+
+type family Cat2 (a::[Nat]) (b::[Nat]) (dim::Nat) :: [Nat] where
+  Cat2 '[] '[] _ = TypeError (TL.Text "Can't cat two scalars")
+  Cat2 (h:t) (h':t)  0 = h+h':t
+  Cat2 (h:t) (h':t') 0 = TypeError (TL.Text "Tensors must agree on all of the dimensions aside from the one being concatenated")
+  Cat2 (h:t) (h:t')  n = Cat2 t t' (n-1)
+  Cat2 (h:_) (h':_)  n = TypeError (TL.Text "Tensors must agree on all of the dimensions aside from the one being concatenated")
+
+type family SelectDimension (a :: [Nat]) (i::Nat) :: Nat where
+  SelectDimension '[]  0   = 1 -- TODO Shoud this fail?
+  SelectDimension '[1] 0   = 1 -- TODO Shoud this fail?
+  SelectDimension '[_] _   = TypeError (TL.Text "Can't select out of bounds dimension")
+  SelectDimension (h:t) n = SelectDimension t (n - 1)
+
+type family Swap (a :: [Nat]) (i::Nat) (j::Nat) :: [Nat] where
+  Swap l i j = ReplaceDimension (ReplaceDimension l i (SelectDimension l j)) j (SelectDimension l i)
 
 type family AdvancedIndex1 (a :: [Nat]) (b :: [Nat]) :: [Nat] where
   AdvancedIndex1 '[] '[]  = '[]
@@ -271,23 +265,52 @@ type family AdvancedIndex1 (a :: [Nat]) (b :: [Nat]) :: [Nat] where
   AdvancedIndex1 a '[]    = a
   AdvancedIndex1 (a:as) b = b ++ as
 
+type family Reverse' l where
+  Reverse' (a:t) = Reverse' t ++ '[a]
+
 -- This helps with some basic equational reasoning that GHC has difficulty
 -- figuring out from the above.
 type family BroadcastSizes a b where
   BroadcastSizes a '[] = a
   BroadcastSizes '[] a = a
   BroadcastSizes a a   = a
-  BroadcastSizes a b   = BroadcastSizes' a b
+  BroadcastSizes a b   = Reverse (BroadcastSizes' (Reverse a) (Reverse b))
+
+type family BroadcastSizes' (i::[Nat]) (j::[Nat]) :: [Nat] where
+  BroadcastSizes' '[] j = j
+  BroadcastSizes' i '[] = i
+  BroadcastSizes' (x:is) (x:js) = x : BroadcastSizes' is js
+  BroadcastSizes' (1:is) (x:js) = x : BroadcastSizes' is js
+  BroadcastSizes' (x:is) (1:js) = x : BroadcastSizes' is js
+  BroadcastSizes' _ _ = TypeError (TL.Text "Types are not broadcastable")
+
+type family ExpandSizes a b where
+  ExpandSizes a '[] = a
+  ExpandSizes '[] a = a
+  ExpandSizes a a   = a
+  ExpandSizes a b   = Reverse (ExpandSizes' (Reverse a) (Reverse b))
+
+type family ExpandSizes' (x :: [Nat]) (y :: [Nat]) :: [Nat] where
+  ExpandSizes' '[] j = j
+  ExpandSizes' i '[] = i
+  ExpandSizes' (x:is) (x:js) = x : ExpandSizes' is js
+  ExpandSizes' (1:is) (x:js) = x : ExpandSizes' is js
+  ExpandSizes' (x:is) (1:js) = x : ExpandSizes' is js
+  ExpandSizes' (x:is) (0:js) = x : ExpandSizes' is js -- NB This was -1 in PyTorch, but it's 0 for us!
+  ExpandSizes' _ _ = TypeError (TL.Text "Types are not expandable")
 
 -- Our matrix broadcast operations are greatly reduced from what torch allows
-type family BroadcastMatrices a b where
+type family BroadcastMatrices (a::[Nat]) (b::[Nat]) :: [Nat] where
   BroadcastMatrices '[i,j] '[j,k] = '[i,k] -- If both arguments are 2-dimensional, the matrix-matrix product is returned.
   BroadcastMatrices '[i] '[j]     = TypeError (TL.Text "Use dot to 'multiply' 1-D matrices")
   BroadcastMatrices _ '[]         = TypeError (TL.Text "Use 'mul' to multiply with scalars")
   BroadcastMatrices '[] _         = TypeError (TL.Text "Use 'mul' to multiply scalars")
   BroadcastMatrices '[i,j] '[j]   = '[i]
   BroadcastMatrices '[i] '[i,j]   = '[j]
-  BroadcastMatrices a b           = BroadcastSizes' a b
+  BroadcastMatrices a b           = BroadcastSizes a b
+
+type family GridRows (imagesPerRow::Nat) (images::Nat) where
+  GridRows imagesPerRow images = (Div images imagesPerRow) + (If (Mod images imagesPerRow == 0) 0 1)
 
 type family SelectIndex (l :: [Nat]) (i :: Nat) :: Nat where
   SelectIndex (h:t) 0 = h
@@ -295,9 +318,9 @@ type family SelectIndex (l :: [Nat]) (i :: Nat) :: Nat where
   SelectIndex '[] _   = TypeError (TL.Text "Too many dimensions when selecting a tensor (SelectIndex)")
 
 type family SelectOtherIndexes (l :: [Nat]) (i :: Nat) :: [Nat] where
-  SelectIndex (h:t) 0 = t
-  SelectIndex (h:t) i = h : SelectOtherIndexes t (i - 1)
-  SelectIndex '[] _   = TypeError (TL.Text "Too many dimensions when selecting a tensor (SelectOtherIndexes)")
+  SelectOtherIndexes (h:t) 0 = t
+  SelectOtherIndexes (h:t) i = h : SelectOtherIndexes t (i - 1)
+  SelectOtherIndexes '[] _   = TypeError (TL.Text "Too many dimensions when selecting a tensor (SelectOtherIndexes)")
 
 type family SquareBatches (l :: [Nat]) :: Bool where
   SquareBatches '[]       = False

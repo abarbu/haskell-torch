@@ -187,21 +187,21 @@ ceil_ x@(Tensor t _) = C.ceil_ t >> pure x
 floor_ :: Tensor ty ki sz -> IO (Tensor ty ki sz)
 floor_ x@(Tensor t _) = C.floor_ t >> pure x
 
-clamp_ :: forall ty ki sz. Tensor ty ki sz -> TensorTyToHs ty -> TensorTyToHs ty -> IO (Tensor ty ki sz)
-clamp_ x@(Tensor t _) lower upper = do
+clamp_ :: forall ty ki sz. TensorTyToHs ty -> TensorTyToHs ty -> Tensor ty ki sz -> IO (Tensor ty ki sz)
+clamp_ lower upper x@(Tensor t _) = do
   l <- toCScalar @ty @ki (hsScalarToC lower)
   u <- toCScalar @ty @ki (hsScalarToC upper)
   C.clamp_ t l u
   pure x
 
-clampMax_ :: forall ty ki sz. Tensor ty ki sz -> TensorTyToHs ty -> IO (Tensor ty ki sz)
-clampMax_ x@(Tensor t _) upper = do
+clampMax_ :: forall ty ki sz. TensorTyToHs ty -> Tensor ty ki sz -> IO (Tensor ty ki sz)
+clampMax_ upper x@(Tensor t _) = do
   u <- toCScalar @ty @ki (hsScalarToC upper)
   C.clamp_max_ t u
   pure x
 
-clampMin_ :: forall ty ki sz. Tensor ty ki sz -> TensorTyToHs ty -> IO (Tensor ty ki sz)
-clampMin_ x@(Tensor t _) lower = do
+clampMin_ :: forall ty ki sz. TensorTyToHs ty -> Tensor ty ki sz -> IO (Tensor ty ki sz)
+clampMin_ lower x@(Tensor t _) = do
   l <- toCScalar @ty @ki (hsScalarToC lower)
   C.clamp_min_ t l
   pure x

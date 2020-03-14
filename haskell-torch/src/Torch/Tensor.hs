@@ -605,7 +605,7 @@ expandAs x@(Tensor tp a) _ = do
   pure $ Tensor te a
 
 -- sz' is an argument
-expand :: forall sz' ty ki sz. (SingI sz', ExpandsTo sz sz' ~ True)
+expand :: forall sz' ty ki sz. (SingI sz', ExpandTo sz sz' ~ True)
        => Tensor ty ki sz -> IO (Tensor ty ki sz')
 expand x@(Tensor t a) = do
   te <- C.expand t (demoteNv @sz') (boolc True)
@@ -733,9 +733,7 @@ out :: Tensor ty ki sz -> IO ()
 out t = str (debuggingVerifyShape "Verifying while printing" t) >>= T.putStrLn
 
 instance {-# OVERLAPPING #-} (TensorConstraints ty ki sz) => ShowIO (Tensor ty ki sz) where
-  showIO x = case sIsScalarLike (sing :: Sing sz) of
-               STrue  -> showScalar <$> fromScalar x
-               SFalse -> T.unpack <$> str x
+  showIO x = caseScalar x (\x -> showScalar <$> fromScalar x) (\x -> T.unpack <$> str x) (sing :: Sing sz)
 
 instance {-# OVERLAPPING #-} (TensorConstraints ty ki sz) => ShowIO (Maybe (Tensor ty ki sz)) where
   showIO Nothing  = pure "Nothing"
@@ -921,6 +919,8 @@ unbind Dimension (Tensor tp _) = do
 -- sorts of compile-time guarantees you want. Check out @Torch.Indexing@ for
 -- syntax that is much more convenient.
 
+-- FIXME:
+-- , SingI (Narrow sz dimension start length)
 narrow :: forall dimension start length ty ki sz.
          (SingI dimension, SingI start, SingI length, SingI (Narrow sz dimension start length))
        => Dimension dimension
@@ -950,6 +950,7 @@ narrow1 Dimension x@(Tensor t a) i = do
 
 narrowFrom :: forall dimension start ty ki sz.
          (SingI dimension, SingI start, SingI (Narrow sz dimension start (LengthRemaining sz dimension start))
+         ,KnownNat (SelectIndex sz dimension)
          ,(start <=? (sz !! dimension)) ~ True, SingI (sz !! dimension), KnownNat (sz !! dimension), KnownNat start)
        => Dimension dimension
        -> Size start
@@ -2101,16 +2102,6 @@ matmul :: forall ty ki sz sz'.
          SingI (BroadcastMatrices sz sz')
          => Tensor ty ki sz -> Tensor ty ki sz' -> IO (Tensor ty ki (BroadcastMatrices sz sz'))
 matmul (Tensor p _) (Tensor p' _) = do
-  r <- C.matmul p p'
-  pure $ Tensor r Nothing
-
--- | Multiply two tensors without broadcasting. This is very general and also handles m*v and v*m products.
--- TODO This is mostly needed because I don't know how to prove some properties of BroadcastMatrices to GHC.
--- TODO Is this useful? Not clear  GHC can prove much more.
-matmul' :: forall ty ki sz sz'.
-          (Last sz ~ Head sz', SingI (InnerDimensions sz sz'))
-        => Tensor ty ki sz -> Tensor ty ki sz' -> IO (Tensor ty ki (InnerDimensions sz sz'))
-matmul' (Tensor p _) (Tensor p' _) = do
   r <- C.matmul p p'
   pure $ Tensor r Nothing
 

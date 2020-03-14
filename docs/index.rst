@@ -9,9 +9,10 @@ Welcome to Haskell-Torch's documentation!
 Coming soon!
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
 
+  Basics.lhs
 
 
 Indices and tables

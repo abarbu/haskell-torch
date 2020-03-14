@@ -73,9 +73,9 @@ clipGradValue_ ts clipValue = do
             g <- gradient t
             case g of
               Nothing -> pure ()
-              Just grad -> clamp_ grad
-                                 (fromDouble (-clipValue))
-                                 (fromDouble clipValue) >> pure ())
+              Just grad -> clamp_ (fromDouble (-clipValue))
+                                 (fromDouble clipValue)
+                                 grad >> pure ())
         ts
 
 -- | TODO Various quantities here are floats, for example learning rates, but some
