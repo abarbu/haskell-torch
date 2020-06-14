@@ -16,6 +16,7 @@ import qualified Data.Text.IO             as T
 import qualified Data.Text.Lazy           as TL
 import           System.Console.Docopt
 import           System.Directory
+import           Data.Maybe
 import           System.Environment       (getArgs)
 import qualified Text.Mustache            as M
 import           Text.Mustache.Compile.TH (mustache)
@@ -102,34 +103,6 @@ emit generatePure retTy nameC nameHs args =
                      (True, ((arg0, _):_)) -> (not (T.isSuffixOf "&" retTy)) && T.isPrefixOf "const " arg0
                      _                     -> False
 
-needsCast :: Text -> Bool
-needsCast "int64_t"                                        = False
-needsCast "c10::optional<int64_t>"                         = False
-needsCast "bool"                                           = False
-needsCast "double"                                         = False
-needsCast "Tensor &"                                       = False
-needsCast "const Tensor &"                                 = False
-needsCast "void*"                                          = False
-needsCast "void"                                           = False
-needsCast "Tensor"                                         = False
-needsCast "SparseTensorRef"                                = False
-needsCast "Scalar"                                         = False
-needsCast "std::tuple<Tensor,Tensor>"                      = False
-needsCast "std::tuple<Tensor,Tensor,Tensor>"               = False
-needsCast "std::tuple<Tensor,Tensor,Tensor,Tensor>"        = False
-needsCast "std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>" = False
-needsCast "std::tuple<Tensor,Tensor,Tensor,int64_t>"       = False
-needsCast "std::tuple<Tensor,Tensor,double,int64_t>"       = False
-needsCast "std::vector<Tensor>"                            = False
-needsCast "QScheme"                                        = True
-needsCast "c10::optional<QScheme>"                         = True
-needsCast x                                                = error $ "Don't know how to needsCast this: " ++ show x
-
-castTy :: Text -> Text
-castTy "QScheme"                = "uint8_t"
-castTy "c10::optional<QScheme>" = "uint8_t"
-castTy x                        = error $ "Don't know how to castTy this: " ++ show x
-
 fillTemplate :: Text -> [(Text, Text)] -> Text
 fillTemplate m args =
   fillTemplate' (case M.compileMustacheText "fillTemplate" m of
@@ -145,26 +118,321 @@ fillTemplate' m args =
 splitTyAndName :: Text -> (Text, Text)
 splitTyAndName = (\(a,b) -> (T.strip a, T.strip b)) . T.breakOnEnd " "
 
--- NB When we talk about vectors here, we mean Data.Vector.Storable
+data MarshalRet = MarshalRet { _castType :: Maybe Text       -- ^ cast is needed from C to Hs
+                             , _retTyHs :: Text        -- ^ Hs type when returning from C
+                             , _retTyC :: Text         -- ^ C type when returning from C
+                             , _needsAlloc :: Bool
+                             , _constructorC :: Text
+                             , _isOpaqueC :: Bool
+                             , _retHsFn :: Text
+                             , _finalizerHs :: Text }
+
+marshalRet :: M.Map Text MarshalRet
+marshalRet = M.fromList
+  [("int64_t", MarshalRet { _castType = Nothing
+                          , _retTyHs = "Int64"
+                          , _retTyC = "int64_t"
+                          , _needsAlloc = False
+                          , _constructorC = ""
+                          , _isOpaqueC = False
+                          , _retHsFn = ""
+                          , _finalizerHs = "" })
+  ,("bool", MarshalRet { _castType = Nothing
+                       , _retTyHs = "CBool"
+                       , _retTyC = "bool"
+                       , _needsAlloc = False
+                       , _constructorC = ""
+                       , _isOpaqueC = False
+                       , _retHsFn = ""
+                       , _finalizerHs = "" })
+  ,("double", MarshalRet { _castType = Nothing
+                         , _retTyHs = "CDouble"
+                         , _retTyC = "double"
+                         , _needsAlloc = False
+                         , _constructorC = ""
+                         , _isOpaqueC = False
+                         , _retHsFn = ""
+                         , _finalizerHs = "" })
+  ,("Tensor &", MarshalRet { _castType = Nothing
+                           , _retTyHs = "ForeignPtr CTensor"
+                           , _retTyC = "Tensor*"
+                           , _needsAlloc = True
+                           , _constructorC = "Tensor"
+                           , _isOpaqueC = False
+                           , _retHsFn = ""
+                           , _finalizerHs = "deleteTensor" })
+  ,("Tensor", MarshalRet { _castType = Nothing
+                         , _retTyHs = "ForeignPtr CTensor"
+                         , _retTyC = "Tensor*"
+                         , _needsAlloc = True
+                         , _constructorC = "Tensor"
+                         , _isOpaqueC = False
+                         , _retHsFn = ""
+                         , _finalizerHs = "deleteTensor" })
+  ,("void*", MarshalRet { _castType = Nothing
+                        , _retTyHs = "Ptr ()"
+                        , _retTyC = "void*"
+                        , _needsAlloc = False
+                        , _constructorC = ""
+                        , _isOpaqueC = False
+                        , _retHsFn = ""
+                        , _finalizerHs = "finalizerFree" })
+  ,("void", MarshalRet { _castType = Nothing
+                       , _retTyHs = "()"
+                       , _retTyC = "void"
+                       , _needsAlloc = False
+                       , _constructorC = ""
+                       , _isOpaqueC = False
+                       , _retHsFn = ""
+                       , _finalizerHs = "" })
+  ,("Scalar", MarshalRet { _castType = Nothing
+                         , _retTyHs = "ForeignPtr CScalar"
+                         , _retTyC = "Scalar*"
+                         , _needsAlloc = True
+                         , _constructorC = "Scalar"
+                         , _isOpaqueC = False
+                         , _retHsFn = ""
+                         , _finalizerHs = "deleteScalar'" })
+  ,("std::tuple<Tensor,Tensor>", MarshalRet { _castType = Nothing
+                                            , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor)"
+                                            , _retTyC = "void*"
+                                            , _needsAlloc = True
+                                            , _constructorC = "std::tuple<Tensor,Tensor>"
+                                            , _isOpaqueC = True
+                                            , _retHsFn = " >>= unTupleTensorTensor"
+                                            , _finalizerHs = "finalizerFree" })
+  ,("std::tuple<Tensor,Tensor,Tensor>", MarshalRet { _castType = Nothing
+                                                   , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor)"
+                                                   , _retTyC = "void*"
+                                                   , _needsAlloc = True
+                                                   , _constructorC = "std::tuple<Tensor,Tensor,Tensor>"
+                                                   , _isOpaqueC = True
+                                                   , _retHsFn = " >>= unTupleTensorTensorTensor"
+                                                   , _finalizerHs = "finalizerFree" })
+  ,("std::tuple<Tensor,Tensor,Tensor,Tensor>", MarshalRet { _castType = Nothing
+                                                          , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor)"
+                                                          , _retTyC = "void*"
+                                                          , _needsAlloc = True
+                                                          , _constructorC = "std::tuple<Tensor,Tensor,Tensor,Tensor>"
+                                                          , _isOpaqueC = True
+                                                          , _retHsFn = " >>= unTupleTensorTensorTensorTensor"
+                                                          , _finalizerHs = "finalizerFree" })
+  ,("std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>", MarshalRet { _castType = Nothing
+                                                                 , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor)"
+                                                                 , _retTyC = "void*"
+                                                                 , _needsAlloc = True
+                                                                 , _constructorC = "std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>"
+                                                                 , _isOpaqueC = True
+                                                                 , _retHsFn = " >>= unTupleTensorTensorTensorTensorTensor"
+                                                                 , _finalizerHs = "finalizerFree" })
+  ,("std::tuple<Tensor,Tensor,Tensor,int64_t>", MarshalRet { _castType = Nothing
+                                                           , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor, Int64)"
+                                                           , _retTyC = "void*"
+                                                           , _needsAlloc = True
+                                                           , _constructorC = "std::tuple<Tensor,Tensor,Tensor,int64_t>"
+                                                           , _isOpaqueC = True
+                                                           , _retHsFn = " >>= unTupleTensorTensorTensorInt64"
+                                                           , _finalizerHs = "finalizerFree" })
+  ,("std::tuple<Tensor,Tensor,double,int64_t>", MarshalRet { _castType = Nothing
+                                                           , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, CDouble, Int64)"
+                                                           , _retTyC = "void*"
+                                                           , _needsAlloc = True
+                                                           , _constructorC = "std::tuple<Tensor,Tensor,double,int64_t>"
+                                                           , _isOpaqueC = True
+                                                           , _retHsFn = " >>= unTupleTensorTensorDoubleInt64"
+                                                           , _finalizerHs = "finalizerFree" })
+  ,("std::tuple<Tensor,Tensor,Tensor,Tensor,int64_t>", MarshalRet { _castType = Nothing
+                                                                  , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor, Int64)"
+                                                                  , _retTyC = "void*"
+                                                                  , _needsAlloc = True
+                                                                  , _constructorC = "std::tuple<Tensor,Tensor,Tensor,Tensor,int64_t>"
+                                                                  , _isOpaqueC = True
+                                                                  , _retHsFn = " >>= unTupleTensorTensorTensorTensorInt64"
+                                                                  , _finalizerHs = "finalizerFree" })
+  ,("std::vector<Tensor>", MarshalRet { _castType = Nothing
+                                      , _retTyHs = "Vector (Ptr CTensor)"
+                                      , _retTyC = "void*"
+                                      , _needsAlloc = True
+                                      , _constructorC = "std::vector<Tensor>"
+                                      , _isOpaqueC = True
+                                      , _retHsFn = " >>= unVectorTensor"
+                                      , _finalizerHs = "finalizerFree" })
+  ,("QScheme", MarshalRet { _castType = Just "uint8_t"
+                          , _retTyHs = "Word8"
+                          , _retTyC = "uint8_t"
+                          , _needsAlloc = False
+                          , _constructorC = ""
+                          , _isOpaqueC = False
+                          , _retHsFn = ""
+                          , _finalizerHs = "" })
+  ,("ScalarType", MarshalRet { _castType = Just "int8_t"
+                             , _retTyHs = "Int8"
+                             , _retTyC = "int8_t"
+                             , _needsAlloc = False
+                             , _constructorC = ""
+                             , _isOpaqueC = False
+                             , _retHsFn = ""
+                             , _finalizerHs = "" })
+  ]
+  
+data MarshalArg = MarshalArg { _argTyHs :: Text        -- ^ Hs type when this is passed as an argument
+                             , _argTyC :: Text         -- ^ C type when passed as an argument to C
+                             , _dereferenceC :: Text
+                             , _argC :: Maybe (Text -> Text)
+                             , _argPreFn :: Maybe (Text -> Text) }
+
+marshalArg :: M.Map Text MarshalArg
+marshalArg = M.fromList
+  [("int64_t", MarshalArg { _argTyHs = "Int64"
+                          , _argTyC = "int64_t"
+                          , _dereferenceC = ""
+                          , _argC = Nothing
+                          , _argPreFn = Nothing })
+  ,("c10::optional<int64_t>", MarshalArg { _argTyHs = "Maybe Int64"
+                                         , _argTyC = "int64_t"
+                                         , _dereferenceC = ""
+                                         , _argC = Just $ \n -> "($(bool " <> renameHs n <> "__is_present) ? make_optional($(int64_t " <> renameHs n <> "__value)) : c10::nullopt)"
+                                         , _argPreFn = Just $ \n -> "let ("<>n<>"__is_present, "<>n<>"__value) = splitMaybe "<>n<> " 0 in " })
+  ,("bool", MarshalArg { _argTyHs = "CBool"
+                       , _argTyC = "bool"
+                       , _dereferenceC = ""
+                       , _argC = Nothing
+                       , _argPreFn = Nothing })
+  ,("c10::optional<bool>", MarshalArg { _argTyHs = "CBool"
+                                      , _argTyC = "bool"
+                                      , _dereferenceC = ""
+                                      , _argC = Nothing
+                                      , _argPreFn = Nothing })
+  ,("double", MarshalArg { _argTyHs = "CDouble"
+                         , _argTyC = "double"
+                         , _dereferenceC = ""
+                         , _argC = Nothing
+                         , _argPreFn = Nothing })
+  ,("c10::optional<double>", MarshalArg { _argTyHs = "Maybe CDouble"
+                                        , _argTyC = "double"
+                                        , _dereferenceC = ""
+                                        , _argC = Just $ \n -> "($(bool " <> renameHs n <> "__is_present) ? make_optional($(double " <> renameHs n <> "__value)) : c10::nullopt)"
+                                        , _argPreFn = Just $ \n -> "let ("<>n<>"__is_present, "<>n<>"__value) = splitMaybe "<>n<> " 0 in " })
+  ,("Tensor &", MarshalArg { _argTyHs = "ForeignPtr CTensor"
+                           , _argTyC = "Tensor*"
+                           , _dereferenceC = "*"
+                           , _argC = Just $ \n -> "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
+                           , _argPreFn = Nothing })
+  ,("const Tensor &", MarshalArg { _argTyHs = "ForeignPtr CTensor"
+                                 , _argTyC = "Tensor*"
+                                 , _dereferenceC = "*"
+                                 , _argC = Just $ \n -> "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
+                                 , _argPreFn = Nothing })
+  ,("Tensor", MarshalArg { _argTyHs = "ForeignPtr CTensor"
+                         , _argTyC = "Tensor*"
+                         , _dereferenceC = "*"
+                         , _argC = Just $ \n -> "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
+                         , _argPreFn = Nothing  })
+  ,("const TensorOptions &", MarshalArg { _argTyHs = "ForeignPtr CTensorOptions"
+                                        , _argTyC = "TensorOptions*"
+                                        , _dereferenceC = "*"
+                                        , _argC = Just $ \n -> "*$fptr-ptr:(TensorOptions* " <> renameHs n <> ")"
+                                        , _argPreFn = Nothing })
+  ,("Scalar", MarshalArg { _argTyHs = "ForeignPtr CScalar"
+                         , _argTyC = "Scalar*"
+                         , _dereferenceC = "*"
+                         , _argC = Just $ \n -> "*$fptr-ptr:(Scalar* " <> renameHs n <> ")"
+                         , _argPreFn = Nothing })
+  ,("c10::optional<Scalar>", MarshalArg { _argTyHs = "ForeignPtr CScalar"
+                                        , _argTyC = "Scalar*"
+                                        , _dereferenceC = "*"
+                                        , _argC = Just $ \n -> "*$fptr-ptr:(Scalar* " <> renameHs n <> ")"
+                                        , _argPreFn = Nothing })
+  ,("ScalarType", MarshalArg { _argTyHs = "Int8"
+                             , _argTyC = "int8_t"
+                             , _dereferenceC = ""
+                             , _argC = Just $ \n -> "static_cast<ScalarType>($(int8_t " <> renameHs n <> "))"
+                             , _argPreFn = Nothing })
+  ,("c10::optional<ScalarType>", MarshalArg { _argTyHs = "Int8"
+                                            , _argTyC = "int8_t"
+                                            , _dereferenceC = ""
+                                            , _argC = Just $ \n -> "static_cast<ScalarType>($(int8_t " <> renameHs n <> "))"
+                                            , _argPreFn = Nothing })
+  ,("MemoryFormat", MarshalArg { _argTyHs = "Int8"
+                               , _argTyC = "int8_t"
+                               , _dereferenceC = ""
+                               , _argC = Just $ \n -> "static_cast<MemoryFormat>($(int8_t " <> renameHs n <> "))"
+                               , _argPreFn = Nothing })
+  ,("c10::optional<MemoryFormat>", MarshalArg { _argTyHs = "Int8"
+                                              , _argTyC = "int8_t"
+                                              , _dereferenceC = ""
+                                              , _argC = Just $ \n -> "static_cast<MemoryFormat>($(int8_t " <> renameHs n <> "))"
+                                              , _argPreFn = Nothing })
+  ,("std::array<bool,2>", MarshalArg { _argTyHs = "Vector CBool"
+                                     , _argTyC = "std::array<bool,2>"
+                                     , _dereferenceC = ""
+                                     , _argC = Just $ \n -> "make_array_bool_2($(bool* " <> renameHs n <> "__array))"
+                                     , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in " })
+  ,("std::array<bool,3>", MarshalArg { _argTyHs = "Vector CBool"
+                                     , _argTyC = "std::array<bool,3>"
+                                     , _dereferenceC = ""
+                                     , _argC = Just $ \n -> "make_array_bool_3($(bool* " <> renameHs n <> "__array))"
+                                     , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in " })
+  ,("std::array<bool,4>", MarshalArg { _argTyHs = "Vector CBool"
+                                     , _argTyC = "std::array<bool,4>"
+                                     , _dereferenceC = ""
+                                     , _argC = Just $ \n -> "make_array_bool_4($(bool* " <> renameHs n <> "__array))"
+                                     , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in " })
+  ,("IntArrayRef", MarshalArg { _argTyHs = "Vector Int64"
+                              , _argTyC = "IntArrayRef"
+                              , _dereferenceC = ""
+                              , _argC = Just $ \n -> "ArrayRef<int64_t>($(int64_t* " <> renameHs n <> "__array), $(size_t "<> n <>"__size))"
+                              , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "})
+  ,("TensorList", MarshalArg { _argTyHs = "Vector (Ptr CTensor)"
+                             , _argTyC = "TensorList"
+                             , _dereferenceC = ""
+                             , _argC = Just $ \n -> "pack_tensor_list($(Tensor** " <> renameHs n <> "__array), $(size_t "<> n <>"__size))"
+                             , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in " })
+  ,("Generator *", MarshalArg { _argTyHs = "Ptr CGenerator"
+                              , _argTyC = "Generator*"
+                              , _dereferenceC = ""
+                              , _argC = Nothing
+                              , _argPreFn = Nothing })
+  ,("std::string", MarshalArg { _argTyHs = "Ptr CChar"
+                              , _argTyC = "char*"
+                              , _dereferenceC = ""
+                              , _argC = Nothing
+                              , _argPreFn = Nothing })
+  ,("Storage &", MarshalArg { _argTyHs = "Ptr CStorage"
+                            , _argTyC = "Storage*"
+                            , _dereferenceC = "*"
+                            , _argC = Nothing
+                            , _argPreFn = Nothing })
+  ,("Storage", MarshalArg { _argTyHs = "Ptr CStorage"
+                          , _argTyC = "Storage*"
+                          , _dereferenceC = "*"
+                          , _argC = Nothing
+                          , _argPreFn = Nothing })
+  ,("Device", MarshalArg { _argTyHs = "Ptr CDevice"
+                         , _argTyC = "Device*"
+                         , _dereferenceC = "*"
+                         , _argC = Nothing
+                         , _argPreFn = Nothing })
+  ]
+
+marshal from field err ty = case M.lookup ty from of
+                              Nothing -> error (err ++ " doesn't know what to do with type " ++ show ty)
+                              Just x -> field x
+
+needsCast :: Text -> Bool
+needsCast = isJust . marshal marshalRet _castType "needsCast"
+
+castTy :: Text -> Text
+castTy = fromJust . marshal marshalRet _castType "castTy"
 
 -- What Haskell type should this return value have?
 retTyHs :: Text -> Text
-retTyHs "Tensor &" = "ForeignPtr CTensor"
-retTyHs "Tensor" = "ForeignPtr CTensor"
-retTyHs "SparseTensorRef" = "ForeignPtr CSparseTensorRef"
-retTyHs "Scalar" = "ForeignPtr CScalar"
-retTyHs "int64_t" = "Int64"
-retTyHs "double" = "CDouble"
-retTyHs "bool" = "CBool"
-retTyHs "void*" = "Ptr ()"
-retTyHs "void" = "()"
-retTyHs "QScheme" = "Word8"
-retTyHs "std::vector<Tensor>" = "Vector (Ptr CTensor)"
-retTyHs "std::vector<Tensor,Tensor,double,int64_t>" = "Vector (Ptr ())" -- that's ugly..
-retTyHs x =
-  case T.splitOn "," <$> (T.stripPrefix "std::tuple<" =<< T.stripSuffix ">" x) of
-    Just r  -> "(" <> T.intercalate ", " (map retTyHs r) <> ")"
-    Nothing -> error $ "Don't know how to retTyHs this: " ++ show x
+retTyHs x = case M.lookup x marshalRet of
+              Just info -> _retTyHs info
+              Nothing ->
+                case T.splitOn "," <$> (T.stripPrefix "std::tuple<" =<< T.stripSuffix ">" x) of
+                  Just r  -> "(" <> T.intercalate ", " (map retTyHs r) <> ")"
+                  Nothing -> error $ "Don't know how to retTyHs this: " ++ show x
 
 rets :: Text -> Int
 rets "void" = 0
@@ -174,205 +442,48 @@ rets retTy =
     Just l  -> length l
 
 -- When marshaling values what type is Haskell going to give C?
-retTyC :: (Eq a, IsString a, IsString p, Show a) => a -> p
-retTyC "Tensor &"                                       = "Tensor*"
-retTyC "Tensor"                                         = "Tensor*"
-retTyC "SparseTensorRef"                                = "SparseTensorRef*"
-retTyC "Scalar"                                         = "Scalar*"
-retTyC "int64_t"                                        = "int64_t"
-retTyC "bool"                                           = "bool"
-retTyC "double"                                         = "double"
-retTyC "void*"                                          = "void*"
-retTyC "void"                                           = "void"
-retTyC "std::tuple<Tensor,Tensor>"                      = "void*"
-retTyC "std::tuple<Tensor,Tensor,Tensor>"               = "void*"
-retTyC "std::tuple<Tensor,Tensor,Tensor,Tensor>"        = "void*"
-retTyC "std::tuple<Tensor,Tensor,Tensor,int64_t>"       = "void*"
-retTyC "std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>" = "void*"
-retTyC "std::vector<Tensor>"                            = "void*"
-retTyC "std::tuple<Tensor,Tensor,double,int64_t>"       = "void*"
-retTyC "QScheme"                                        = "uint8_t"
-retTyC x                                                = error $ "Don't know how to retTyC this: " ++ show x
-
--- What type does this argument have in Haskell?
-argTyHs :: (Eq a, IsString a, IsString p, Show a) => a -> p
-argTyHs "const TensorOptions &"       = "ForeignPtr CTensorOptions"
-argTyHs "Tensor &"                    = "ForeignPtr CTensor"
-argTyHs "Tensor"                      = "ForeignPtr CTensor"
-argTyHs "const Tensor &"              = "ForeignPtr CTensor"
-argTyHs "SparseTensorRef"             = "ForeignPtr CSparseTensorRef"
-argTyHs "Storage &"                   = "Ptr CStorage"
-argTyHs "Storage"                     = "Ptr CStorage"
-argTyHs "Scalar"                      = "ForeignPtr CScalar"
-argTyHs "c10::optional<Scalar>"       = "ForeignPtr CScalar"
-argTyHs "Generator *"                 = "Ptr CGenerator"
-argTyHs "bool"                        = "CBool"
-argTyHs "c10::optional<bool>"         = "CBool"
-argTyHs "double"                      = "CDouble"
-argTyHs "IntArrayRef"                 = "Vector Int64"
-argTyHs "std::array<bool,2>"          = "Vector CBool"
-argTyHs "std::array<bool,3>"          = "Vector CBool"
-argTyHs "std::array<bool,4>"          = "Vector CBool"
-argTyHs "TensorList"                  = "Vector (Ptr CTensor)"
-argTyHs "int64_t"                     = "Int64"
-argTyHs "c10::optional<int64_t>"      = "Maybe Int64"
-argTyHs "ScalarType"                  = "Int8"
-argTyHs "c10::optional<ScalarType>"   = "Int8"
-argTyHs "Device"                      = "Ptr CDevice"
-argTyHs "std::string"                 = "Ptr CChar"
-argTyHs "const Type &"                = "Ptr CVariableType"
-argTyHs "c10::optional<MemoryFormat>" = "Int8"
-argTyHs "MemoryFormat"                = "Int8"
-argTyHs x                             = error $ "Don't know how to argTyHs this: " ++ show x
-
-argTyC :: (Eq a, IsString a, IsString p, Show a) => a -> p
-argTyC "const TensorOptions &"       = "TensorOptions*"
-argTyC "Tensor &"                    = "Tensor*"
-argTyC "Tensor"                      = "Tensor*"
-argTyC "const Tensor &"              = "Tensor*"
-argTyC "SparseTensorRef"             = "SparseTensorRef*"
-argTyC "Storage &"                   = "Storage*"
-argTyC "Storage"                     = "Storage*"
-argTyC "Scalar"                      = "Scalar*"
-argTyC "c10::optional<Scalar>"       = "Scalar*"
-argTyC "Generator *"                 = "Generator*"
-argTyC "bool"                        = "bool"
-argTyC "c10::optional<bool>"         = "bool"
-argTyC "double"                      = "double"
-argTyC "int64_t"                     = "int64_t"
-argTyC "c10::optional<int64_t>"      = "int64_t"
-argTyC "ScalarType"                  = "int8_t"
-argTyC "c10::optional<ScalarType>"   = "int8_t"
-argTyC "Device"                      = "Device*"
-argTyC "std::string"                 = "char*"
-argTyC "const Type &"                = "VariableType*"
-argTyC "c10::optional<MemoryFormat>" = "int8_t"
-argTyC "MemoryFormat"                = "int8_t"
-argTyC x                             = error $ "Don't know how to argTyC this: " ++ show x
-
--- If this is a pointer, how do we access its memory?
-dereferenceC :: (Eq a, IsString a, IsString p, Show a) => a -> p
-dereferenceC "const TensorOptions &"       = "*"
-dereferenceC "Tensor &"                    = "*"
-dereferenceC "const Tensor &"              = "*"
-dereferenceC "Tensor"                      = "*"
-dereferenceC "SparseTensorRef"             = "*"
-dereferenceC "Storage &"                   = "*"
-dereferenceC "Storage"                     = "*"
-dereferenceC "Scalar"                      = "*"
-dereferenceC "c10::optional<Scalar>"       = "*"
-dereferenceC "Generator *"                 = ""
-dereferenceC "bool"                        = ""
-dereferenceC "c10::optional<bool>"         = ""
-dereferenceC "double"                      = ""
-dereferenceC "IntArrayRef"                 = ""
-dereferenceC "std::array<bool,2>"          = ""
-dereferenceC "std::array<bool,3>"          = ""
-dereferenceC "std::array<bool,4>"          = ""
-dereferenceC "TensorList"                  = ""
-dereferenceC "int64_t"                     = ""
-dereferenceC "c10::optional<int64_t>"      = ""
-dereferenceC "ScalarType"                  = ""
-dereferenceC "c10::optional<ScalarType>"   = ""
-dereferenceC "Device"                      = "*"
-dereferenceC "std::string"                 = ""
-dereferenceC "const Type &"                = "*"
-dereferenceC "c10::optional<MemoryFormat>" = ""
-dereferenceC "MemoryFormat"                = ""
-dereferenceC x                             = error $ "Don't know how to dereferenceC this: " ++ show x
+retTyC :: Text -> Text
+retTyC = marshal marshalRet _retTyC "retTyC"
 
 -- Do we need to alocate memory in order to marshal this type?
-needsAlloc :: (Eq a, IsString a, Show a) => a -> Bool
-needsAlloc "int64_t"                                        = False
-needsAlloc "c10::optional<int64_t>"                         = False
-needsAlloc "bool"                                           = False
-needsAlloc "double"                                         = False
-needsAlloc "Tensor &"                                       = False
-needsAlloc "const Tensor &"                                 = False
-needsAlloc "void*"                                          = False
-needsAlloc "void"                                           = False
-needsAlloc "Tensor"                                         = True
-needsAlloc "SparseTensorRef"                                = True
-needsAlloc "Scalar"                                         = True
-needsAlloc "std::tuple<Tensor,Tensor>"                      = True
-needsAlloc "std::tuple<Tensor,Tensor,Tensor>"               = True
-needsAlloc "std::tuple<Tensor,Tensor,Tensor,Tensor>"        = True
-needsAlloc "std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>" = True
-needsAlloc "std::tuple<Tensor,Tensor,Tensor,int64_t>"       = True
-needsAlloc "std::tuple<Tensor,Tensor,double,int64_t>"       = True
-needsAlloc "std::vector<Tensor>"                            = True
-needsAlloc "QScheme"                                        = False
-needsAlloc x                                                = error $ "Don't know how to needsAlloc this: " ++ show x
+needsAlloc :: Text -> Bool
+needsAlloc = marshal marshalRet _needsAlloc "needsAlloc"
 
 -- How do we build this tpye in C?
-constructorC :: (Eq a, IsString a, IsString p, Show a) => a -> p
-constructorC "Tensor &"                                       = "Tensor"
-constructorC "Tensor"                                         = "Tensor"
-constructorC "SparseTensorRef"                                = "SparseTensorRef"
-constructorC "Scalar"                                         = "Scalar"
-constructorC "std::tuple<Tensor,Tensor>"                      = "std::tuple<Tensor,Tensor>"
-constructorC "std::tuple<Tensor,Tensor,Tensor>"               = "std::tuple<Tensor,Tensor,Tensor>"
-constructorC "std::tuple<Tensor,Tensor,Tensor,Tensor>"        = "std::tuple<Tensor,Tensor,Tensor,Tensor>"
-constructorC "std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>" = "std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>"
-constructorC "std::tuple<Tensor,Tensor,Tensor,int64_t>"       = "std::tuple<Tensor,Tensor,Tensor,int64_t>"
-constructorC "std::tuple<Tensor,Tensor,double,int64_t>"       = "std::tuple<Tensor,Tensor,double,int64_t>"
-constructorC "std::vector<Tensor>"                            = "std::vector<Tensor>"
-constructorC x                                                = error $ "Don't know how to constructorC this: " ++ show x
+constructorC :: Text -> Text
+constructorC = marshal marshalRet _constructorC "constructorC"
 
-isOpaqueC :: (Eq a, IsString a, Show a) => a -> Bool
-isOpaqueC "Tensor"                                         = False
-isOpaqueC "Tensor&"                                        = False
-isOpaqueC "SparseTensorRef"                                = False
-isOpaqueC "Scalar"                                         = False
-isOpaqueC "bool"                                           = False
-isOpaqueC "double"                                         = False
-isOpaqueC "void*"                                          = False
-isOpaqueC "int64_t"                                        = False
-isOpaqueC "c10::optional<int64_t>"                         = False
-isOpaqueC "std::tuple<Tensor,Tensor>"                      = True
-isOpaqueC "std::tuple<Tensor,Tensor,Tensor>"               = True
-isOpaqueC "std::tuple<Tensor,Tensor,Tensor,Tensor>"        = True
-isOpaqueC "std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>" = True
-isOpaqueC "std::tuple<Tensor,Tensor,Tensor,int64_t>"       = True
-isOpaqueC "std::tuple<Tensor,Tensor,double,int64_t>"       = True
-isOpaqueC "std::vector<Tensor>"                            = True
-isOpaqueC x                                                = error $ "Don't know how to isOpaqueC this: " ++ show x
+isOpaqueC :: Text -> Bool
+isOpaqueC = marshal marshalRet _isOpaqueC "isOpaqueC"
 
 -- What function will marshal this from C to Hs
-retHsFn :: (Eq a, IsString a, IsString p, Show a) => a -> p
-retHsFn "Tensor"                                         = ""
-retHsFn "Tensor&"                                        = ""
-retHsFn "SparseTensorRef"                                = ""
-retHsFn "Scalar"                                         = ""
-retHsFn "bool"                                           = ""
-retHsFn "double"                                         = ""
-retHsFn "void*"                                          = ""
-retHsFn "void"                                           = ""
-retHsFn "int64_t"                                        = ""
-retHsFn "std::tuple<Tensor,Tensor>"                      = " >>= unTupleTensorTensor"
-retHsFn "std::tuple<Tensor,Tensor,Tensor>"               = " >>= unTupleTensorTensorTensor"
-retHsFn "std::tuple<Tensor,Tensor,Tensor,Tensor>"        = " >>= unTupleTensorTensorTensorTensor"
-retHsFn "std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>" = " >>= unTupleTensorTensorTensorTensorTensor"
-retHsFn "std::tuple<Tensor,Tensor,Tensor,int64_t>"       = " >>= unTupleTensorTensorTensorInt64"
-retHsFn "std::tuple<Tensor,Tensor,double,int64_t>"       = " >>= unTupleTensorTensorDoubleInt64"
-retHsFn "std::vector<Tensor>"                            = " >>= unVectorTensor"
-retHsFn "QScheme"                                        = ""
-retHsFn x                                                = error $ "Don't know how to retHsFn this: " ++ show x
+retHsFn :: Text -> Text
+retHsFn = marshal marshalRet _retHsFn "retHsFn"
 
 -- How will we free the memory in Haskell?
-finalizerHs :: (Eq a, IsString a, IsString p, Show a) => a -> p
-finalizerHs "Tensor"                                         = "deleteTensor"
-finalizerHs "Tensor&"                                        = "deleteTensor"
-finalizerHs "SparseTensorRef"                                = "deleteTensor"
-finalizerHs "Scalar"                                         = "deleteScalar'"
-finalizerHs "void*"                                          = "finalizerFree"
-finalizerHs "std::tuple<Tensor,Tensor>"                      = "finalizerFree"
-finalizerHs "std::tuple<Tensor,Tensor,Tensor>"               = "finalizerFree"
-finalizerHs "std::tuple<Tensor,Tensor,Tensor,Tensor>"        = "finalizerFree"
-finalizerHs "std::tuple<Tensor,Tensor,Tensor,Tensor,Tensor>" = "finalizerFree"
-finalizerHs "std::tuple<Tensor,Tensor,Tensor,int64_t>"       = "finalizerFree"
-finalizerHs "std::vector<Tensor>"                            = "finalizerFree"
-finalizerHs x                                                = error $ "Don't know how to finalizerHs this: " ++ show x
+finalizerHs :: Text -> Text
+finalizerHs = marshal marshalRet _finalizerHs "finalizerHs"
+
+-- What type does this argument have in Haskell?
+argTyHs :: Text -> Text
+argTyHs = marshal marshalArg _argTyHs "argTyHs"
+
+argTyC :: Text -> Text
+argTyC = marshal marshalArg _argTyC "argTyC"
+
+-- If this is a pointer, how do we access its memory?
+dereferenceC :: Text -> Text
+dereferenceC = marshal marshalArg _dereferenceC "dereferenceC"
+
+argC :: (Text, Text) -> Text
+argC (ty, n) = case marshal marshalArg _argC "argC" ty of
+                 Just fn -> fn n
+                 Nothing -> dereferenceC ty <> "$(" <> argTyC ty <> " " <> renameHs n <> ")"
+
+argPreFn :: (Text, Text) -> Text
+argPreFn (ty, n) = case marshal marshalArg _argPreFn "argPreFn" ty of
+                     Just fn -> fn n
+                     Nothing -> ""
 
 renameHs :: Text -> Text
 renameHs "where" = "whereX"
@@ -380,41 +491,6 @@ renameHs "data"  = "dataX"
 renameHs "type"  = "typeX"
 renameHs "in"    = "inX"
 renameHs x       = T.toLower x
-
-argC :: (Eq a, IsString a, Show a) => (a, Text) -> Text
-argC ("IntArrayRef", n)                 = "ArrayRef<int64_t>($(int64_t* " <> renameHs n <> "__array), $(size_t "<> n <>"__size))"
-argC ("std::array<bool,2>", n)          = "make_array_bool_2($(bool* " <> renameHs n <> "__array))"
-argC ("std::array<bool,3>", n)          = "make_array_bool_3($(bool* " <> renameHs n <> "__array))"
-argC ("std::array<bool,4>", n)          = "make_array_bool_4($(bool* " <> renameHs n <> "__array))"
-argC ("TensorList", n)                  = "pack_tensor_list($(Tensor** " <> renameHs n <> "__array), $(size_t "<> n <>"__size))"
-argC ("Tensor &", n)                    = "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
-argC ("const Tensor &", n)              = "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
-argC ("Tensor", n)                      = "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
-argC ("Scalar", n)                      = "*$fptr-ptr:(Scalar* " <> renameHs n <> ")"
-argC ("c10::optional<Scalar>", n)       = "*$fptr-ptr:(Scalar* " <> renameHs n <> ")"
-argC ("const TensorOptions &", n)       = "*$fptr-ptr:(TensorOptions* " <> renameHs n <> ")"
-argC ("SparseTensorRef", n)             = "*$fptr-ptr:(SparseTensorRef* " <> renameHs n <> ")"
-argC ("MemoryFormat", n)                = "static_cast<MemoryFormat>($(int8_t " <> renameHs n <> "))"
-argC ("c10::optional<MemoryFormat>", n) = "static_cast<MemoryFormat>($(int8_t " <> renameHs n <> "))"
-argC ("ScalarType", n)                  = "static_cast<ScalarType>($(int8_t " <> renameHs n <> "))"
-argC ("c10::optional<ScalarType>", n)   = "static_cast<ScalarType>($(int8_t " <> renameHs n <> "))"
-argC ("c10::optional<int64_t>", n)      = "($(bool " <> renameHs n <> "__is_present) ? make_optional($(int64_t " <> renameHs n <> "__value)) : c10::nullopt)"
-argC (ty, n)                            = dereferenceC ty <> "$(" <> argTyC ty <> " " <> renameHs n <> ")"
-
-argPreFn :: (Eq a1, Semigroup a2, IsString a1, IsString a2) => (a1, a2) -> a2
-argPreFn ("IntArrayRef", n) =
-  "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "
-argPreFn ("std::array<bool,2>", n) =
-  "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "
-argPreFn ("std::array<bool,3>", n) =
-  "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "
-argPreFn ("std::array<bool,4>", n) =
-  "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "
-argPreFn ("TensorList", n) =
-  "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "
-argPreFn ("c10::optional<int64_t>", n) =
-  "let ("<>n<>"__is_present, "<>n<>"__value) = splitMaybe "<>n<> " 0 in "
-argPreFn _ = ""
 
 main :: IO ()
 main = do
@@ -434,7 +510,14 @@ main = do
                           x    -> x
                  (ty,name) = splitTyAndName pre
              in (ty, name, args))
-        $ filter (T.isInfixOf ";") $ T.lines $ fst $ T.breakOn "private:" $ snd $ T.breakOn "Tensor __and__" (T.replace "  static " "" fin)
+        $ filter (not . T.isInfixOf "ConstQuantizerPtr") -- NB We don't yet support quantization
+        $ filter (not . T.isInfixOf "Dimname") -- NB We don't support named dimensions
+        $ filter (T.isInfixOf "{")
+        $ T.lines
+        $ fst
+        $ T.breakOn "namespace"
+        $ snd
+        $ T.breakOn "Tensor __and__" (T.replace "  static " "" fin)
   let ls = snd $ mapAccumL (\m (ty, name, args) ->
                               (M.alter (\x -> Just $ case x of
                                            Nothing -> 1
