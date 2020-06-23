@@ -103,7 +103,7 @@ ex = do
                 is' <- reshape @'[BatchSz, 1, 28, 28] images'
                 writeGreyTensorToFile ("generated-images/reconstructed-"<>show' epoch<>"@"<>show' n<>".jpg")
                   =<< makeGreyGrid (size_ @8) (padding_ @2) 0
-                  =<< cat2 @3 is is'
+                  =<< cat2 @0 is is'
                 pure ()
               pure ())
             trainStream)
