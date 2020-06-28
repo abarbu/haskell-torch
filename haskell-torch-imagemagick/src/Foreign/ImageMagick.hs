@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, QuasiQuotes, ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings, QuasiQuotes, ScopedTypeVariables, TemplateHaskell, FlexibleContexts #-}
 
 -- | Minimal matio bindings. These are just enough to read the few types of mat
 -- files that tend to contain datasets.
@@ -37,7 +37,6 @@ import qualified Language.C.Types                 as C
 C.context imageMagickCtx
 
 C.verbatim "#define MAGICKCORE_QUANTUM_DEPTH 16"
-C.verbatim "#define MAGICKCORE_HDRI_ENABLE 0"
 C.include "<MagickWand/MagickWand.h>"
 
 C.verbatim "void delete_magickwand(MagickWand *w) { DestroyMagickWand(w); }"

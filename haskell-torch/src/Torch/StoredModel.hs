@@ -847,8 +847,12 @@ storedModelContents mod = do
   nr <- C.jitModuleNumberOfSlots mod
   mapM (\i -> do
            s <- C.jitModuleSlotName mod (fromIntegral i)
-           t <- C.jitModuleSlotType mod (fromIntegral i)
-           pure (s,t)) [0..(nr-1)]
+           isModule <- C.jitModuleSlotIsModule mod (fromIntegral i)
+           isParameter <- C.jitModuleSlotIsParameter mod (fromIntegral i)
+           pure (s,case (isModule, isParameter) of
+                    (1, 0) -> C.ModuleEntityType
+                    (0, 1) -> C.ParameterEntityType
+                    (0, 0) -> C.MethodEntityType)) [0..(nr-1)]
 
 -- Internal
 convertStoredModelTensors :: ForeignPtr C.CJitScriptModule -> IO (M.Map Text (ForeignPtr C.CTensor))

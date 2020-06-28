@@ -33,7 +33,7 @@ and fills out CTensor.hs. Note that this file is generated, it does not
 exist in the upstream repo as is.
 
 Usage:
-  generate-ctensor <dest-file> <variable-type-header> [--verbose]
+  generate-ctensor <dest-file> <functions-header> <tensor-body-header> [--verbose]
   generate-ctensor -h | --help
   generate-ctensor -v | --version
 
@@ -42,31 +42,32 @@ Options:
   --verbose             No compiler messages
   -v --version          Show version
 |]
-
-emit :: Bool -> Text -> Text -> Text -> [(Text, Text)] -> Text
-emit generatePure retTy nameC nameHs args =
+  
+emit :: Bool -> Bool -> Text -> Text -> Text -> [(Text, Text)] -> Text
+emit generatePure member retTy nameC nameHs args =
   fillTemplate' [mustache|
 -- {{&retTy}} {{&nameC}}({{&allArgs}})
--- {{&inlineHs}}
+--{{&inlineHs}}
 {{&nameHs}} :: {{&argTysHs}}{{&monadHs}}{{&retTyHs}}
 {{&nameHs}} {{&argNames}} = {{&unsafePerformIO}} {{&preHsFn}}
   [C.block|{{&retTyC}} {
-    {{&retCFn}}at::{{&nameC}}({{&argsC}}){{&retCFnEnd}};
+    {{&retCFn}}{{&prefix}}{{&nameC}}({{&argsC}}){{&retCFnEnd}};
    }{{&end}}{{&retHsFn}}
 |]
     [("end","|]")
+    ,("prefix", if member then "$fptr-ptr:(Tensor *self)->" else "at::")
     ,("retTy", retTy)
     ,("allArgs", T.intercalate ", " (map (\(a,b) -> a <> " " <> b) args))
     ,("nameC", nameC)
     ,("nameHs", renameHs nameHs)
-    ,("argTysHs", case T.intercalate " -> " $ map argTyHs $ map fst args of
+    ,("argTysHs", case T.intercalate " -> " $ map argTyHs $ map fst $ (if member then [("Tensor *", "self")] else []) ++ args of
                     "" -> ""
                     x  -> x <> " -> ")
     ,("retTyHs", let r = retTyHs retTy
                  in if T.isPrefixOf "(" r && T.isSuffixOf ")" r then
                       r else
                       "(" <> r <> ")")
-    ,("argNames", T.unwords $ map (renameHs . snd) args)
+    ,("argNames", T.unwords $ map (renameHs . snd) $ (if member then [("Tensor *", "self")] else []) ++ args)
     ,("preHsFn", T.intercalate "" $ map argPreFn args)
     ,("retTyC", if not isPure && (T.isSuffixOf "_" nameC || T.isSuffixOf "_out" nameC) then
                   "void" else
@@ -99,7 +100,7 @@ emit generatePure retTy nameC nameHs args =
                        retHsFn retTy)
     ,("monadHs", if isPure then "" else "IO ")
     ,("unsafePerformIO", if isPure then "unsafePerformIO $" else "")
-    ,("inlineHs", if isPure then "{-# NOINLINE "<>renameHs nameHs<>" #-}" else "")
+    ,("inlineHs", if isPure then " {-# NOINLINE "<>renameHs nameHs<>" #-}" else "")
     ]
     where isPure = case (generatePure, args) of
                      (True, ((arg0, _):_)) -> (not (T.isSuffixOf "&" retTy)) && T.isPrefixOf "const " arg0
@@ -338,6 +339,11 @@ marshalArg = M.fromList
                          , _dereferenceC = "*"
                          , _argC = Just $ \n -> "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
                          , _argPreFn = Nothing  })
+  ,("Tensor *", MarshalArg { _argTyHs = "ForeignPtr CTensor"
+                           , _argTyC = "Tensor*"
+                           , _dereferenceC = ""
+                           , _argC = Just $ \n -> "$fptr-ptr:(Tensor* " <> renameHs n <> ")"
+                           , _argPreFn = Nothing  })
   ,("const TensorOptions &", MarshalArg { _argTyHs = "ForeignPtr CTensorOptions"
                                         , _argTyC = "TensorOptions*"
                                         , _dereferenceC = "*"
@@ -502,48 +508,196 @@ renameHs "type"  = "typeX"
 renameHs "in"    = "inX"
 renameHs x       = T.toLower x
 
-main :: IO ()
-main = do
-  args <- parseArgsOrExit patterns =<< getArgs
-  destFile            <- T.pack <$> args `getArgOrExit` argument "dest-file"
-  variableTypeHeader  <- T.pack <$> args `getArgOrExit` argument "variable-type-header"
-  unlessM (doesFileExist $ T.unpack destFile) (exitWithUsageMessage patterns $ "Destination file doesn't exist! " ++ show destFile)
-  unlessM (doesFileExist $ T.unpack variableTypeHeader) (exitWithUsageMessage patterns $ "Header doesn't exist! " ++ show variableTypeHeader)
-  fin <- T.readFile $ T.unpack variableTypeHeader
+mangleNameByType :: Text -> [Text] -> Bool -> Text
+mangleNameByType name tys member =
+  name <> (if member then "_m" else "__") <> T.intercalate "" (map (\ty -> case M.lookup ty table of
+                                                                       Nothing -> error $ "Can't mangle " ++ show ty
+                                                                       Just t -> t) tys)
+  where table = M.fromList [("int64_t", "6")
+                           ,("c10::optional<int64_t>", "6")
+                           ,("bool", "b")
+                           ,("c10::optional<bool>", "b")
+                           ,("double", "d")
+                           ,("c10::optional<double>", "d")
+                           ,("Tensor &", "t")
+                           ,("const Tensor &", "t")
+                           ,("Tensor", "t")
+                           ,("Tensor *", "t")
+                           ,("const TensorOptions &", "o")
+                           ,("Scalar", "s")
+                           ,("c10::optional<Scalar>", "s")
+                           ,("ScalarType", "S")
+                           ,("c10::optional<ScalarType>", "S")
+                           ,("MemoryFormat", "M")
+                           ,("c10::optional<MemoryFormat>", "M")
+                           ,("std::array<bool,2>", "a")
+                           ,("std::array<bool,3>", "a")
+                           ,("std::array<bool,4>", "a")
+                           ,("IntArrayRef", "a")
+                           ,("TensorList", "l")
+                           ,("Generator *", "g")
+                           ,("std::string", "s")
+                           ,("Storage &", "S")
+                           ,("Storage", "S")
+                           ,("Device", "d")]
+
+generateFromFile :: Text -> Text -> Maybe Text -> ([Text] -> [Text]) -> Bool -> Bool -> IO [Text]
+generateFromFile filename start end cleanup member verbose = do
+  unlessM (doesFileExist $ T.unpack filename) (exitWithUsageMessage patterns $ "Header doesn't exist! " ++ show filename)
+  fin <- T.readFile $ T.unpack filename
   let os =
-        filter (\(ty, name, args) -> (not (T.isInfixOf "_forward" name)) && (not (T.isInfixOf "_backward" name)))
+        filter (\(ty, name, args, member) -> (not (T.isInfixOf "_forward" name)) && (not (T.isInfixOf "_backward" name)))
         $ map (\x ->
          case T.splitOn "(" x of
            [pre,args'] ->
              let args = case T.splitOn ", " $ fst $ T.breakOn ")" args' of
                           [""] -> []
-                          x    -> map (T.takeWhile (/= '=')) x
+                          x    -> map (T.takeWhile (/= '=')) x -- default arguments
                  (ty, name) = splitTyAndName pre
-             in (ty, name, args))
+             in (ty, name, args, member)
+           _ -> error $ "Failed to split function: " ++ show x
+              )
         $ filter (not . T.isInfixOf "ConstQuantizerPtr") -- NB We don't yet support quantization
         $ filter (not . T.isInfixOf "Dimname") -- NB We don't support named dimensions
-        $ filter (T.isInfixOf "{")
-        $ map (T.replace "static inline " "")
-        $ filter (T.isInfixOf "static inline ")
+        $ cleanup
         $ T.lines
+        $ (\x -> case end of
+                  Nothing -> x
+                  Just end' -> fst $ T.breakOn end' x)
         $ snd
-        $ T.breakOn "static inline Tensor _cast_Byte(" fin
+        $ T.breakOn start fin
   mapM_ print os
-  let ls = snd $ mapAccumL (\m (ty, name, args) ->
+  let ls = snd $ mapAccumL (\m (ty, nameC, nameHs, args, member) ->
                               (M.alter (\x -> Just $ case x of
                                            Nothing -> 1
                                            Just n  -> n + 1)
-                                name
+                                nameHs
                                 m
-                              ,emit False ty name
-                                (case M.lookup name m of
-                                    Nothing -> name
-                                    Just n  -> name <> "__" <> T.pack (show n))
-                                (map splitTyAndName args)))
-                M.empty os
-  when (args `isPresent` longOption "verbose") $ mapM_ T.putStrLn ls
+                              ,emit False member ty nameC
+                                (case M.lookup nameHs m of
+                                    Nothing -> nameHs
+                                    Just n  -> nameHs <> "__" <> T.pack (show n))
+                                args))
+                M.empty $ map (\(ty, nameC, args, member) ->
+                             (ty
+                             , nameC
+                             , mangleNameByType nameC (map (fst . splitTyAndName) args) member
+                             , map splitTyAndName args
+                             , member)) os
+  when verbose $ mapM_ T.putStrLn ls
+  pure ls
+
+generateFunctions :: Text -> Bool -> IO [Text]
+generateFunctions filename verbose = do
+  generateFromFile filename "static inline Tensor _cast_Byte(" Nothing
+    (filter (T.isInfixOf "{")
+      . map (T.replace "static inline " "")
+      . filter (T.isInfixOf "static inline "))
+    False
+    verbose
+
+generateTensorBody :: Text -> Bool -> IO [Text]
+generateTensorBody filename verbose = do
+  generateFromFile filename "  void backward(" (Just "// We changed .dtype")
+    (map (T.replace ") const" ")")
+      . filter (T.isInfixOf ") const"))
+    True
+    verbose
+
+-- generateFunctions :: Text -> Bool -> IO [Text]
+-- generateFunctions filename verbose = do
+--   let os =
+--         filter (\(ty, name, args) -> (not (T.isInfixOf "_forward" name)) && (not (T.isInfixOf "_backward" name)))
+--         $ map (\x ->
+--          case T.splitOn "(" x of
+--            [pre,args'] ->
+--              let args = case T.splitOn ", " $ fst $ T.breakOn ")" args' of
+--                           [""] -> []
+--                           x    -> map (T.takeWhile (/= '=')) x
+--                  (ty, name) = splitTyAndName pre
+--              in (ty, name, args))
+--         $ filter (not . T.isInfixOf "ConstQuantizerPtr") -- NB We don't yet support quantization
+--         $ filter (not . T.isInfixOf "Dimname") -- NB We don't support named dimensions
+--         $ filter (T.isInfixOf "{")
+--         $ map (T.replace "static inline " "")
+--         $ filter (T.isInfixOf "static inline ")
+--         $ T.lines
+--         $ snd
+--         $ T.breakOn "static inline Tensor _cast_Byte(" fin
+--   mapM_ print os
+--   let ls = snd $ mapAccumL (\m (ty, name, args) ->
+--                               (M.alter (\x -> Just $ case x of
+--                                            Nothing -> 1
+--                                            Just n  -> n + 1)
+--                                 name
+--                                 m
+--                               ,emit False False ty name
+--                                 (case M.lookup name m of
+--                                     Nothing -> name
+--                                     Just n  -> name <> "__" <> T.pack (show n))
+--                                 (map splitTyAndName args)))
+--                 M.empty os
+--   when verbose $ mapM_ T.putStrLn ls
+--   pure ls
+
+-- generateTensorBody :: Text -> Bool -> IO [Text]
+-- generateTensorBody filename verbose = do
+--   let os =
+--         filter (\(ty, name, args, member) -> (not (T.isInfixOf "_forward" name)) && (not (T.isInfixOf "_backward" name)))
+--         $ map (\x ->
+--          case T.splitOn "(" x of
+--            [pre,args'] ->
+--              let args = case T.splitOn ", " $ fst $ T.breakOn ")" args' of
+--                           [""] -> []
+--                           x    -> map (T.takeWhile (/= '=')) x
+--                  (ty, name) = splitTyAndName pre
+--              in (ty, name, args, True)
+--            _ -> error $ "Failed to split function: " ++ show x
+--               )
+--         $ filter (not . T.isInfixOf "ConstQuantizerPtr") -- NB We don't yet support quantization
+--         $ filter (not . T.isInfixOf "Dimname") -- NB We don't support named dimensions
+--         $ filter (\x -> T.isInfixOf "{" x || T.isInfixOf ";" x)
+--         $ map (T.replace ") const" ")")
+--         $ filter (T.isInfixOf ") const")
+--         $ T.lines
+--         $ fst
+--         $ T.breakOn "// We changed .dtype"
+--         $ snd
+--         $ T.breakOn "  void backward(" fin
+--   mapM_ print os
+--   let ls = snd $ mapAccumL (\m (ty, nameC, nameHs, args, member) ->
+--                               (M.alter (\x -> Just $ case x of
+--                                            Nothing -> 1
+--                                            Just n  -> n + 1)
+--                                 nameC
+--                                 m
+--                               ,emit False member ty nameC
+--                                 (case M.lookup nameHs m of
+--                                     Nothing -> nameHs
+--                                     Just n  -> nameHs <> "__" <> T.pack (show n))
+--                                 args))
+--                 M.empty $ map (\(ty, nameC, args, member) ->
+--                              (ty
+--                              , nameC
+--                              , mangleNameByType nameC (map (fst . splitTyAndName) args) member
+--                              , map splitTyAndName args
+--                              , member)) os
+--   when verbose $ mapM_ T.putStrLn ls
+--   pure ls
+
+main :: IO ()
+main = do
+  args <- parseArgsOrExit patterns =<< getArgs
+  destFile            <- T.pack <$> args `getArgOrExit` argument "dest-file"
+  functionsHeader  <- T.pack <$> args `getArgOrExit` argument "functions-header"
+  tensorBodyHeader  <- T.pack <$> args `getArgOrExit` argument "tensor-body-header"
+  unlessM (doesFileExist $ T.unpack destFile) (exitWithUsageMessage patterns $ "Destination file doesn't exist! " ++ show destFile)
   dest <- T.readFile $ T.unpack destFile
+  generatedFunctions <- generateFunctions functionsHeader (args `isPresent` longOption "verbose")
+  generatedTensorBody <- generateTensorBody tensorBodyHeader (args `isPresent` longOption "verbose")
   case T.breakOnEnd "-- Everything below is AUTOGENERATED from generate-ctensor" dest of
-    (pre, _) -> T.writeFile (T.unpack destFile) (pre <> "\n" <> T.unlines ls)
+    (pre, _) -> T.writeFile (T.unpack destFile) (pre <> "\n"
+                                                <> T.unlines generatedFunctions <> "\n"
+                                                <> T.unlines generatedTensorBody)
   T.putStrLn $ "Updated " <> destFile
   pure ()

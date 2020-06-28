@@ -2,7 +2,7 @@
 {-# LANGUAGE EmptyCase, ExistentialQuantification, FlexibleContexts, FlexibleInstances, FunctionalDependencies, GADTs, KindSignatures  #-}
 {-# LANGUAGE MultiParamTypeClasses, OverloadedLabels, OverloadedStrings, PartialTypeSignatures, PolyKinds, QuasiQuotes, RankNTypes     #-}
 {-# LANGUAGE RecordWildCards, ScopedTypeVariables, TemplateHaskell, TypeApplications, TypeFamilies, TypeFamilyDependencies, TypeInType #-}
-{-# LANGUAGE TypeOperators, UndecidableInstances                                                                                       #-}
+{-# LANGUAGE TypeOperators, UndecidableInstances, StandaloneKindSignatures                                                             #-}
 {-# OPTIONS_GHC -pgmP cc -optP -E -optP -undef -optP -std=c89 #-}
 
 -- | The basic types and type-level operators shared by all of Haskell-Torch.
@@ -118,6 +118,7 @@ cDeviceType KCuda = C.BackendCUDA
 #endif
 
 genSingletons [''TensorType, ''TensorKind]
+
 singDecideInstances [''TensorType, ''TensorKind]
 
 -- * Many singletons for type-level operations.
@@ -923,7 +924,7 @@ genSingletons [''DataPurpose]
 -- TODO Better error messages
 debuggingVerifyShape :: forall ty ki sz. Text -> Tensor ty ki sz -> Tensor ty ki sz
 debuggingVerifyShape msg t@(Tensor p _) = unsafePerformIO $ do
-  tys' <- C.getTypeString p >>= peekCString
+  tys' <- C.getTypeString p
   let tys = cvarname (demote @ty) (demote @ki)
   if tys' == "UndefinedType" then
     pure t else do
@@ -933,25 +934,25 @@ debuggingVerifyShape msg t@(Tensor p _) = unsafePerformIO $ do
     unless (tys == tys') $ error $ "Type mismatch! types expect " ++ show tys ++ " but the computed type is " ++ show tys' ++ "\n" ++ T.unpack msg
     pure t
   where
-    cvarname TBool   KCpu  = "Variable[CPUBoolType]"
-    cvarname TByte   KCpu  = "Variable[CPUByteType]"
-    cvarname TChar   KCpu  = "Variable[CPUCharType]"
-    cvarname TShort  KCpu  = "Variable[CPUShortType]"
-    cvarname TInt    KCpu  = "Variable[CPUIntType]"
-    cvarname TLong   KCpu  = "Variable[CPULongType]"
-    cvarname THalf   KCpu  = "Variable[CPUHalfType]"
-    cvarname TFloat  KCpu  = "Variable[CPUFloatType]"
-    cvarname TDouble KCpu  = "Variable[CPUDoubleType]"
+    cvarname TBool   KCpu  = "CPU Bool"
+    cvarname TByte   KCpu  = "CPU Byte"
+    cvarname TChar   KCpu  = "CPU Char"
+    cvarname TShort  KCpu  = "CPU Short"
+    cvarname TInt    KCpu  = "CPU Int"
+    cvarname TLong   KCpu  = "CPU Long"
+    cvarname THalf   KCpu  = "CPU Half"
+    cvarname TFloat  KCpu  = "CPU Float"
+    cvarname TDouble KCpu  = "CPU Double"
 #if WITH_CUDA
-    cvarname TBool   KCuda = "Variable[CUDABoolType]"
-    cvarname TByte   KCuda = "Variable[CUDAByteType]"
-    cvarname TChar   KCuda = "Variable[CUDACharType]"
-    cvarname TShort  KCuda = "Variable[CUDAShortType]"
-    cvarname TInt    KCuda = "Variable[CUDAIntType]"
-    cvarname TLong   KCuda = "Variable[CUDALongType]"
-    cvarname THalf   KCuda = "Variable[CUDAHalfType]"
-    cvarname TFloat  KCuda = "Variable[CUDAFloatType]"
-    cvarname TDouble KCuda = "Variable[CUDADoubleType]"
+    cvarname TBool   KCuda = "CUDA Bool"
+    cvarname TByte   KCuda = "CUDA Byte"
+    cvarname TChar   KCuda = "CUDA Char"
+    cvarname TShort  KCuda = "CUDA Short"
+    cvarname TInt    KCuda = "CUDA Int"
+    cvarname TLong   KCuda = "CUDA Long"
+    cvarname THalf   KCuda = "CUDA Half"
+    cvarname TFloat  KCuda = "CUDA Float"
+    cvarname TDouble KCuda = "CUDA Double"
 #endif
 
 -- | Internal. This is an internal test. TODO Move me

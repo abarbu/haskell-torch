@@ -21,6 +21,8 @@ import qualified Torch.C.Types        as C
 import qualified Torch.C.Variable     as C
 import           Torch.Tensor
 import           Torch.Types
+import           Foreign.ForeignPtr.Unsafe
+
 
 data TraceValue = TraceValueTensor { tvTensorName       :: T.Text
                                    , tvTensorSizes      :: Vector Int64
@@ -39,17 +41,17 @@ data TraceGraph = TraceGraph { traceGraphInputs  :: [TraceValue]
 
 type TracePtr = ForeignPtr C.CTracingState
 
-withTracing :: [AnyTensor] -> IO (Tensor ty ki sz) -> IO (Tensor ty ki sz, TracePtr)
+withTracing :: (TensorConstraints ty ki sz) => [AnyTensor] -> IO (Tensor ty ki sz) -> IO (Tensor ty ki sz, TracePtr)
 withTracing ts f = do
   -- TODO This has a constant, 1
+  cfn <- C.mkTraceable (\_ -> castPtr . unsafeForeignPtrToPtr . tensorPtr <$> f) -- TODO Tensor to Variable cast
   (state, vars) <- withForeignPtrList (map (\(AnyTensor (Tensor p _)) -> p) ts)
-                                      (\ps -> C.enter_trace (V.map castPtr ps))
-  loss <- f
-  withForeignPtr (tensorPtr loss) (\p -> C.exit_trace (V.singleton (castPtr p)))
-  -- TODO What about this?
+                                      (\ps -> C.trace (V.map castPtr ps) 1 cfn)
+  -- FIXME What about this?
   -- state' <- newForeignPtr C.deleteTracingState state
   state' <- newForeignPtr_ state
-  pure (loss, state')
+  ptr <- newForeignPtr C.deleteTensor  $ castPtr $ vars V.! 0
+  pure (Tensor ptr Nothing, state') -- TODO Nothing might instead be vars
 
 -- | This prints the trace in the pytorch/onnx graph format.
 printTrace :: TracePtr -> IO ()
@@ -82,13 +84,14 @@ convertCType t = do
   k <- C.type_kind t
   grad <- C.type_requires_grad t
   case k of
-    C.TypeKindCompleteTensor -> do
+    C.TypeKindTensor -> do
       sizes <- C.type_sizes t
       scalar <- C.type_scalar_type t
       device <- C.type_device_type t
       pure $ TraceTypeTensor grad (Just sizes) (Just scalar) (Just device)
-    C.TypeKindTensor -> do
-      pure $ TraceTypeTensor grad Nothing Nothing Nothing
+      -- TODO cleanup
+      -- C.TypeKindCompleteTensor -> do
+      -- pure $ TraceTypeTensor grad Nothing Nothing Nothing
     C.TypeKindList -> do
       cs <- C.type_contained t
       cs' <- mapM convertCType $ V.toList cs
@@ -111,77 +114,7 @@ convertCType t = do
       pure $ TraceTypeSimple grad k
     _ -> do
       print =<< C.type_string t
-      error "Unsupported variable type"
-
-rawTrace trace = do
-  (inputs, nodes, outputs, ret, block) <-
-    withForeignPtr trace C.tracing_state_graph
-  print "==================================================Inputs"
-  print inputs
-  V.mapM printValue inputs
-  print "==================================================Nodes"
-  print nodes
-  V.mapM print nodes
-  V.mapM (\x -> do
-             print "----Node Kind"
-             print =<< C.node_kind x
-             print =<< C.node_kind' x
-             print "......................."
-             b <- C.node_has_attribute x "value"
-             print b
-             when (cbool b) $ do
-               ak <- C.node_attribute_kind x "value"
-               print ak
-               case ak of
-                 C.AttributeKindFloat -> do
-                   f <- C.node_get_attribute_float x "value"
-                   print f
-                 C.AttributeKindInt -> do
-                   i <- C.node_get_attribute_int x "value"
-                   print i
-                 C.AttributeKindString -> do
-                   s <- C.node_get_attribute_string x "value"
-                   print s
-                 C.AttributeKindTensor -> do
-                   t <- C.node_get_attribute_tensor x "value"
-                   print t
-                   s <- C.str t
-                   print s
-             print "----In"
-             V.mapM_ printValue =<< C.node_inputs x
-             print "----Out"
-             V.mapM_ printValue =<< C.node_outputs x
-         ) nodes
-  print "==================================================Outputs"
-  print outputs
-  V.mapM printValue outputs
-  pure ()
-  where printValue x = do
-             print =<< C.value_name x
-             print =<< C.value_is_tensor x
-             t <- C.value_type x
-             print t
-             print =<< C.type_string t
-             k <- C.type_kind t
-             print k
-             print =<< C.type_requires_grad t
-             t' <- convertCType t
-             print "***********************"
-             print t'
-             case k of
-               C.TypeKindList -> do
-                 cs <- C.value_type_contained x
-                 print $ V.length cs
-                 print cs
-                 print []
-               C.TypeKindCompleteTensor -> do
-                 print =<< C.value_sizes x
-                 print =<< C.type_scalar_type t
-                 print =<< C.type_device_type t
-               C.TypeKindTensor -> do
-                 print =<< C.value_sizes x
-                 print =<< C.type_scalar_type t
-               _ -> pure ()
+      error "Unsupported variable type, see line above"
 
 parseTrace :: ForeignPtr C.CTracingState -> IO TraceGraph
 parseTrace trace =
@@ -192,7 +125,7 @@ parseTrace trace =
           os <- mapM parseValue $ V.toList outputs
           pure $ TraceGraph is ns os
         parseValue x = do
-          b <- cbool <$> C.value_is_tensor x
+          b <- cbool <$> C.check_value_tensor x
           if b then do
             sz <- C.value_sizes x
             ty <- C.value_scalar_type x

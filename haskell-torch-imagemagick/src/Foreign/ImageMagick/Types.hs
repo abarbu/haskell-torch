@@ -2,28 +2,17 @@
 
 module Foreign.ImageMagick.Types where
 import qualified Data.ByteString                  as BS
-import qualified Data.ByteString.Unsafe           as BS
 import qualified Data.Map                         as Map
-import           Data.Monoid                      (mempty, (<>))
 import           Data.Text                        (Text)
-import           Data.Text                        (Text)
-import qualified Data.Text                        as T
 import qualified Data.Text.Encoding               as T
-import qualified Data.Text.Foreign                as T
-import qualified Data.Vector                      as V'
-import           Data.Vector.Storable             (Vector)
-import qualified Data.Vector.Storable             as V
 import           Foreign.C.String
 import           Foreign.C.Types
 import qualified Language.C.Inline                as C
 import qualified Language.C.Inline.Context        as C
-import qualified Language.C.Inline.Cpp            as C
-import qualified Language.C.Inline.Cpp.Exceptions as C
 import qualified Language.C.Types                 as C
 import qualified Language.Haskell.TH              as TH
 
 C.verbatim "#define MAGICKCORE_QUANTUM_DEPTH 16"
-C.verbatim "#define MAGICKCORE_HDRI_ENABLE 0"
 C.include "<ImageMagick-7/MagickWand/MagickWand.h>"
 
 data CMagickWand

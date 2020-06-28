@@ -333,12 +333,9 @@ GHC devs, please help!
    that can post-process errors to make them readable for humans. Individual
    libraries understand the errors that they will produce far better than any
    general-purpose code ever could. We really want to say "the 2nd argument of
-   this tensor should be divisible by 2". the Tame thing happens for other
+   this tensor should be divisible by 2". The same thing happens for other
    libraries with a lot of polymorphism, for example lens, and we could all do
-   much better. Also, newcomers to haskell simply can't understand ghcs errors,
-   we could make a plugin that provides friendly errors for those who want
-   them. Libraries can also make much saner suggestions about how to fix certain
-   errors.
+   much better. Also, newcomers to haskell simply can't understand ghc's errors.
 4. *non-recursive bindings*. Haskell `let` is equivalent to Scheme's
    `letrec`. This means that you can't write code like: `out <- fn1 out; out <- fn2 out`. 
    You need to uniquely name each of these values. Long chains like
@@ -368,12 +365,10 @@ Some minor usability requests, although one can live without these:
  6. We need qualified exports to keep the library in some decent shape. Not
     having them is a pain and a usability nightmare for large heterogenous
     libraries like this. ML libraries have to do all sorts of random things from
-    load image, to writing tensors, to dealing with memory concerns. Having all
+    loading images, to writing tensors, to dealing with memory concerns. Having all
     of them in the same flat namespace is a mess and asking users to copy and
     paste an import block is not practical. Users can't be asked to constantly
     update that import block as the shape of the library changes.
- 7. Linear types. We really need them to ensure type safety for many parts of
-    the library, particularly inplace operations. We can't wait to have them!
  8. Type argument support. We need to be able to annotate which type parameters
-    are actually mean to be arguments in Haddock. Documentation is far too hard
+    are actually meant to be arguments in Haddock. Documentation is far too hard
     to read without this.

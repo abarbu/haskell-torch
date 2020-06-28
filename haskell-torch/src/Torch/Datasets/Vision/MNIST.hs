@@ -78,7 +78,7 @@ remoteDatasetMNIST root directory labelurl labelmd5 imageurl imagemd5 =
                            (narrowFromToByLength (dimension_ @0) (size_ @1) labs' (fromIntegral n))))
             [0..demoteN @nrExamples - 1]
         fetchOne force url md5 = do
-          liftIO $ createDirectoryIfMissing (root </> directory)
+          liftIO $ createDirectoryIfMissing' (root </> directory)
           checkMD5 (dirpath </> takeBaseName url) md5 `retryAfter`
             (do downloadUrl url (dirpath </> takeFileName url)
                 extractGzip (dirpath </> takeFileName url))

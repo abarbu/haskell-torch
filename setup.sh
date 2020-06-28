@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export WITH_JUPYTER=YES
+export WITH_JUPYTER=NO
 export WITH_CUDA=IF_PRESENT
 
 while test $# -gt 0; do
@@ -110,14 +110,14 @@ echo "======================================================================"
 echo "Building"
 echo "======================================================================"
 
-stack build haskell-torch --fast
+stack build haskell-torch --fast || { echo "Failed to build haskell-torch! :("; exit 1 }
 
 echo "======================================================================"
 echo "We are now setting up jupyter / ihaskell"
 echo "======================================================================"
 
 if [ $WITH_JUPYTER = "YES" ]; then
-    patch -p0 < ihaskell-dynamic.diff
+    patch --forward -p0 < ihaskell-dynamic.diff
     stack install ihaskell --fast
     stack exec -- ihaskell install --stack
     cd ihaskell/ihaskell_labextension

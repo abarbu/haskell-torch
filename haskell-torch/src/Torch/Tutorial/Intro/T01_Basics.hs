@@ -161,11 +161,11 @@ ex8 = do
   unsafeEnableGrad
   setSeed 0
   -- Create tensors of shape (10, 3) and (10, 2).
-  x <- typed @TFloat <$> stored @KCpu <$> sized (size_ @'[10,3]) <$> randn
-  y <- sized (size_ @'[10,2]) <$> randn
+  x <- typed @TFloat <$> stored @KCpu <$> sized (size_ @'[7,5]) <$> randn
+  y <- sized (size_ @'[7,2]) <$> randn
   -- Weights and biases for a fully connected layer
   w <- noGradP
-  let model = linear (inFeatures_ @3) (outFeatures_ @2) w
+  let model = linear (inFeatures_ @5) (outFeatures_ @2) w
   let criterion = mseLoss y def
   params <- toParameters w
   (loss, trace) <- withTracing [AnyTensor x, AnyTensor y] $ do
@@ -176,7 +176,6 @@ Loss: #{loss}|]
   printTrace trace
   printTraceONNX trace [AnyTensor x, AnyTensor y] False 11
   trace' <- parseTrace trace
-  rawTrace trace
   summarizeTrace trace'
   showTraceGraph trace False
   -- 1 step of gradient descent

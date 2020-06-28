@@ -37,7 +37,6 @@ ex = do
     pred <- model x
     criterion pred
   printTrace trace
-  rawTrace trace
   addGraph sw "grph" trace
   forEachDataUntil
     (\step _ -> pure (step == 10))

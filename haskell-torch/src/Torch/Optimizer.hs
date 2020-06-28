@@ -330,9 +330,9 @@ adam_ (AnyAdam param p) = withoutGrad $ do
           denom <- case (adamAMSGrad, adamMaxExpAvgSq) of
                     (True, Just maxExpAvgSq) -> do
                       -- Maintains the maximum of all 2nd moment running avg. till now
-                      C.max_out__1 (tensorPtr maxExpAvgSq)
-                                   (tensorPtr expAvgSq)
-                                   (tensorPtr maxExpAvgSq)
+                      C.max_out__ttt (tensorPtr maxExpAvgSq)
+                                     (tensorPtr expAvgSq)
+                                     (tensorPtr maxExpAvgSq)
                       -- Use the max. for normalizing running avg. of gradient
                       T.sqrt maxExpAvgSq
                     _ -> T.sqrt expAvgSq

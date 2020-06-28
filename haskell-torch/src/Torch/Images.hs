@@ -29,6 +29,7 @@ import qualified Foreign.ImageMagick      as I
 import           GHC.Int
 import qualified GHC.TypeLits             as TL
 import           System.Random            (randomRIO)
+import qualified Torch.C.Types                as C
 import qualified Torch.C.Tensor           as C
 import           Torch.Inplace
 import           Torch.Misc
@@ -198,10 +199,10 @@ normalizeGreyImageTensor :: forall ty ki szh szw.
                          -> Tensor ty ki '[1,szh,szw]
                          -> IO (Tensor ty ki '[1,szh,szw])
 normalizeGreyImageTensor (Tensor mean _) (Tensor std _) (Tensor t _) = do
-  t' <- C.clone t
+  t' <- C.clone__tm t (fromIntegral $ fromEnum  C.MemoryFormatPreserve)
   s <- toCScalar @ty @ki 1
-  C.sub_ t' mean s
-  C.div_ t' std
+  C.sub_mts t' mean s
+  C.div__mt t' std
   pure $ Tensor t' Nothing
 
 -- TODO Test this normalizeRGBImageTensor

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, QuasiQuotes, ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts, QuasiQuotes, ScopedTypeVariables, TemplateHaskell, ForeignFunctionInterface #-}
 
 module Torch.C.Variable where
 import           Control.Monad.Extra
@@ -31,10 +31,10 @@ C.include "<torch/csrc/autograd/variable.h>"
 C.include "<torch/csrc/autograd/function.h>"
 C.include "<torch/csrc/autograd/generated/VariableType.h>"
 C.include "<torch/csrc/autograd/grad_mode.h>"
-C.include "<torch/csrc/jit/tracer.h>"
-C.include "<torch/csrc/jit/ir.h>"
-C.include "<torch/csrc/jit/export.h>"
-C.include "<torch/csrc/jit/import.h>"
+C.include "<torch/csrc/jit/frontend/tracer.h>"
+C.include "<torch/csrc/jit/ir/ir.h>"
+C.include "<torch/csrc/jit/serialization/export.h>"
+C.include "<torch/csrc/jit/serialization/import.h>"
 
 C.using "namespace std"
 C.using "namespace torch::autograd"
@@ -47,6 +47,7 @@ C.verbatim "using JitIValue       = torch::jit::IValue;"
 C.verbatim "using JitBlock        = torch::jit::Block;"
 C.verbatim "using JitType         = ::c10::Type;"
 C.verbatim "using JitScriptModule = torch::jit::script::Module;"
+C.verbatim "using Stack           = torch::jit::Stack;"
 
 C.verbatim "extern \"C\" void delete_variable(Variable* o) { delete o; }"
 C.verbatim "extern \"C\" void delete_tracing_state(shared_ptr<TracingState>* o) { delete o; }"
@@ -74,7 +75,7 @@ delete :: Coercible a (ForeignPtr CTensor) => a -> IO ()
 delete v = [C.exp|void { delete ((Variable*) $fptr-ptr:(Tensor *v)); }|]
 
 version :: Coercible a (ForeignPtr CTensor) => a -> IO CInt
-version v = [C.exp|int { ((Variable*) $fptr-ptr:(Tensor *v))->current_version() }|]
+version v = [C.exp|int { ((Variable*) $fptr-ptr:(Tensor *v))->_version() }|]
 
 gradient_function :: Coercible a (ForeignPtr CTensor) => a -> IO (Ptr CNode)
 gradient_function v = [C.exp|Node* { ((Variable*) $fptr-ptr:(Tensor *v))->grad_fn().get() }|]
@@ -96,7 +97,6 @@ unVectorEdge ptr = do
           in [C.exp|Edge *{ &(((std::vector<Edge>*)$(void* ptr))->at($(int i'))) }|])
   pure r
 
-C.verbatim "using Stack = std::vector<JitIValue>;"
 C.verbatim "Stack pack_variable_list(Variable** arr, size_t len) { std::vector<JitIValue> v; for(size_t i = 0; i < len; i++) { v.push_back(JitIValue(*(arr[i]))); }; return v; }"
 
 unVectorVariable :: Ptr () -> IO (Vector (Ptr CVariable))
@@ -108,44 +108,57 @@ unVectorVariable ptr = do
   [C.exp|void { delete ((std::vector<JitIValue>*)$(void* ptr)) }|]
   pure r
 
-enter_trace :: Vector (Ptr CVariable) -> IO (Ptr CTracingState, Vector (Ptr CVariable))
-enter_trace vs =
-  V.unsafeWith vs
-  $ \variables__array ->
-      let variables__size = fromIntegral (V.length vs) in
+type Traceable = Ptr CVariable -> IO (Ptr CVariable)
+foreign import ccall "wrapper" mkTraceable :: Traceable -> IO (FunPtr Traceable)
+
+-- using Stack = std::vector<IValue>;
+trace :: Vector (Ptr CVariable) -> CInt -> FunPtr (Ptr CVariable -> IO (Ptr CVariable)) -> IO (Ptr CTracingState, Vector (Ptr CVariable))
+trace variables nrOutputs fn = do
+  print "XTRACE"
+  V.unsafeWith variables
+   $ \variables__array ->
+      let variables__size = fromIntegral (V.length variables) in
         do
-          ps <- mallocArray 2
+          out <- mallocArray 2
           [C.block|void {
-      void **ps = $(void **ps);
+      cout << "CtracerXin" << endl;
+      void **out = $(void **out);
       shared_ptr<TracingState> state;
-      Stack trace_vars_in;
+      Stack trace_vars_outputs;
       Stack input_vars = pack_variable_list($(Variable** variables__array), $(size_t variables__size));
-      std::vector<TypePtr> input_types;
-      input_types.reserve(input_vars.size());
-      for (size_t i = 0; i < input_vars.size(); i++) {
-         input_types.push_back(TensorType::get());
-      }
-      auto input_typeptr = TupleType::create(std::move(input_types));
-      std::tie(state, trace_vars_in) = torch::jit::tracer::enter(torch::jit::tracer::TypedStack(input_vars, input_typeptr));
-      cout << "State has N references " << state.use_count() << endl;
+      auto func = $(Variable* (*fn)(Variable*));
+      int nr_outputs = $(int nrOutputs);
+      cout << "CtracerXf" << endl;
+      std::tie(state, trace_vars_outputs) =
+         torch::jit::tracer::trace(
+             input_vars,
+             [&func,&nr_outputs](Stack inputs) {
+                cout << "CtracerXfn" << endl;
+                std::vector<Tensor> in; // TODO What happens if we save this trace?
+                cout << "CtracerXten" << endl;
+                for(size_t i = 0; i < inputs.size(); i++) in.push_back(inputs[i].toTensor());
+                cout << "CtracerXcallback" << endl;
+                Tensor *outs = func(in.data());
+                cout << "CtracerXcallbackret" << endl;
+                Stack outputs;
+                for(int i = 0; i < nr_outputs; i++) outputs.push_back(JitIValue(outs[i]));
+                cout << "CtracerXfnret" << endl;
+                return outputs;
+             },
+             [](const Variable& var) { return "";}
+      );
+      cout << "XXState has N references " << state.use_count() << endl;
       shared_ptr<TracingState> *statePtr =
             new shared_ptr<TracingState>(state);
-      cout << "State has N references " << state.use_count() << endl;
-      ps[0] = state.get();
-      ps[1] = new Stack(trace_vars_in);
+      cout << "XXState has N references " << state.use_count() << endl;
+      out[0] = state.get();
+      out[1] = new Stack(trace_vars_outputs);
       return;
           }|]
-          tracingState <- [C.exp|TracingState* { (TracingState*) $(void **ps)[0] }|]
-          traceVarsIn <- [C.exp|JitIValue* { (JitIValue*) $(void **ps)[1] }|]
+          tracingState <- [C.exp|TracingState* { (TracingState*) $(void **out)[0] }|]
+          traceVarsIn <- [C.exp|JitIValue* { (JitIValue*) $(void **out)[1] }|]
           ts <- unVectorVariable (castPtr traceVarsIn)
           pure (tracingState, ts)
-
-exit_trace :: Vector (Ptr CVariable) -> IO ()
-exit_trace vs = do
-  V.unsafeWith vs
-  $ \variables__array ->
-      let variables__size = fromIntegral (V.length vs) in
-        [C.exp|void { torch::jit::tracer::exit(pack_variable_list($(Variable** variables__array), $(size_t variables__size))) } |]
 
 print_tracing_state_graph :: Ptr CTracingState -> IO ()
 print_tracing_state_graph ts =
@@ -286,21 +299,30 @@ node_get_attribute_tensor n str =
 value_name :: Ptr CJitValue -> IO String
 value_name v = [C.exp|char *{ (char*)$(JitValue *v)->debugName().c_str() }|] >>= peekCString
 
-value_is_tensor :: Ptr CJitValue -> IO CBool
-value_is_tensor v = [C.exp|bool { $(JitValue *v)->isCompleteTensor() }|]
+-- Are there any unknown sizes or properties.
+-- This shouldn't happen in Haskell
+value_is_complete_tensor :: Ptr CJitValue -> IO CBool
+value_is_complete_tensor v = [C.exp|bool { $(JitValue *v)->isCompleteTensor() }|]
 
--- TODO Handle these cases!
+check_value_tensor :: Ptr CJitValue -> IO CBool
+check_value_tensor v = [C.exp|bool { ($(JitValue *v)->type()->cast<TensorType>() ? 1 : 0) }|]
 
--- Only use on tensors!
+-- TODO Calling this on something that isn't a complete tensor would be rather disastrous.
 value_sizes :: Ptr CJitValue -> IO (Vector Int64)
 value_sizes v = do
-  s <- [C.exp|int { ((CompleteTensorType*)&(*$(JitValue *v)->type()))->sizes().size() }|]
-  d <- [C.exp|int64_t *{ const_cast<int64_t*>(((CompleteTensorType*)&(*$(JitValue *v)->type()))->sizes().data()) }|] >>= newForeignPtr_
+  s <- [C.exp|int { ((TensorType*)&(*$(JitValue *v)->type()))->sizes().size().value() }|]
+  d <- [C.block|int64_t *{
+              int64_t *ptr = (int64_t*)malloc(sizeof(int64_t)*$(int s));
+              auto value = $(JitValue *v)->type()->cast<TensorType>();
+              for(int i = 0; i < $(int s); i++)
+                  ptr[i] = *value->sizes()[i];
+              return ptr;
+       }|] >>= newForeignPtr finalizerFree
   pure $ V.unsafeFromForeignPtr0 d (fromIntegral s)
 
 value_scalar_type :: Ptr CJitValue -> IO ScalarType
 value_scalar_type v = do
-  (CInt s) <- [C.exp|int { (int) ((CompleteTensorType*)&(*$(JitValue *v)->type()))->scalarType() }|]
+  (CInt s) <- [C.exp|int { (int) ((TensorType*)&(*$(JitValue *v)->type()))->scalarType().value() }|]
   pure $ toEnum $ fromIntegral s
 
 value_type_kind :: Ptr CJitValue -> IO TypeKind
@@ -311,7 +333,7 @@ value_type v = [C.exp|JitType *{ $(JitValue *v)->type().get() }|]
 
 type_scalar_type :: Ptr CType -> IO ScalarType
 type_scalar_type t = do
-  (CInt s) <- [C.exp|int { (int) ((CompleteTensorType*)($(JitType *t)))->scalarType() }|]
+  (CInt s) <- [C.exp|int { (int) ((TensorType*)($(JitType *t)))->scalarType().value() }|]
   pure $ toEnum $ fromIntegral s
 
 type_kind :: Ptr CType -> IO TypeKind
@@ -323,16 +345,16 @@ type_string t = [C.exp|char* { (char*)$(JitType *t)->str().c_str() }|] >>= peekC
 -- Only use on tensors!
 type_sizes :: Ptr CType -> IO (Vector Int64)
 type_sizes t = do
-  s <- [C.exp|int { ((CompleteTensorType*)$(JitType *t))->sizes().size() }|]
-  d <- [C.exp|int64_t *{ const_cast<int64_t*>(((CompleteTensorType*)$(JitType *t))->sizes().data()) }|] >>= newForeignPtr_
+  s <- [C.exp|int { ((TensorType*)$(JitType *t))->sizes().size().value() }|]
+  d <- [C.exp|int64_t *{ const_cast<int64_t*>(((TensorType*)$(JitType *t))->sizes().concrete_sizes().value().data()) }|] >>= newForeignPtr_
   pure $ V.unsafeFromForeignPtr0 d (fromIntegral s)
 
 type_device_type :: Ptr CType -> IO Backend
-type_device_type t = toEnum . fromIntegral <$> [C.exp|int { (int)((CompleteTensorType*)$(JitType *t))->device().type() }|]
+type_device_type t = toEnum . fromIntegral <$> [C.exp|int { (int)((TensorType*)$(JitType *t))->device().value().type() }|]
 
 type_requires_grad :: Ptr CType -> IO Bool
 type_requires_grad t = do
-  (CBool b) <- [C.exp|bool { ((CompleteTensorType*)($(JitType *t)))->requires_grad() }|]
+  (CBool b) <- [C.exp|bool { ((TensorType*)($(JitType *t)))->requires_grad() }|]
   pure (b /= 0)
 
 type_contained :: Ptr CType -> IO (Vector (Ptr CType))
@@ -357,14 +379,6 @@ value_type_contained v = do
 debug_print_unique_name :: Ptr CJitValue -> IO ()
 debug_print_unique_name v = do
   [C.exp|void { cout << "JitValue name:" << $(JitValue *v)->debugName() << endl << $(JitValue *v)->type()->str() << endl; }|]
-
--- Test code:
-  -- std::shared_ptr<TracingState> state;
-  -- variable_list trace_vars_in;
-  -- std::tie(state, trace_vars_in) = torch::jit::tracer::enter(vars_in, 1);
-  -- auto trace_vars_out = test(trace_vars_in);
-  -- torch::jit::tracer::exit(trace_vars_out);
-  -- return state->graph;
 
 -- Only alive while the function is alive!
 function_next_edges f = [C.exp|void* { (void*)&($(Node *f)->next_edges()) }|] >>= unVectorEdge
@@ -429,8 +443,8 @@ name v = [C.exp|const char *{ ((Variable*) $fptr-ptr:(Tensor *v))->name().c_str(
 -- TODO Hooks!
 -- clear_backwards_hooks v = [C.exp|void { ((Variable*) $fptr-ptr:(Tensor *v))->hooks().clear() }|]
 
-base :: Coercible a (ForeignPtr CTensor) => a -> IO (Ptr CVariable)
-base v = [C.exp|Variable *{ const_cast<Variable*>(&((Variable*) $fptr-ptr:(Tensor *v))->base()) }|]
+-- base :: Coercible a (ForeignPtr CTensor) => a -> IO (Ptr CVariable)
+-- base v = [C.exp|Variable *{ const_cast<Variable*>(&((Variable*) $fptr-ptr:(Tensor *v))->base()) }|]
 
 shape :: Coercible a (ForeignPtr CTensor) => a -> IO (Vector CLong)
 shape v = do
@@ -485,14 +499,14 @@ jitModuleReadFromFile filename = do
     Just <$> newForeignPtr deleteJitModule m
 
 jitModuleHasTensor mod key =
-  withTextCString key (\k -> [C.exp|bool {$fptr-ptr:(JitScriptModule *mod)->find_parameter($(char *k)) ? true : false }|])
+  withTextCString key (\k -> [C.exp|bool {$fptr-ptr:(JitScriptModule *mod)->attr($(char *k)).isTensor() }|])
 
 jitModuleReadTensor mod key =
-  withTextCString key (\k -> [C.exp|Tensor *{ new Tensor($fptr-ptr:(JitScriptModule *mod)->find_parameter($(char *k))->value().toTensor()) }|])
+  withTextCString key (\k -> [C.exp|Tensor *{ new Tensor($fptr-ptr:(JitScriptModule *mod)->attr($(char *k)).toTensor()) }|])
   >>= newForeignPtr deleteTensor
 
 jitModuleReadModule mod key =
-  withTextCString key (\k -> [C.exp|JitScriptModule *{ new JitScriptModule($fptr-ptr:(JitScriptModule *mod)->get_module($(char *k))) }|])
+  withTextCString key (\k -> [C.exp|JitScriptModule *{ new JitScriptModule($fptr-ptr:(JitScriptModule *mod)->attr($(char *k)).toModule()) }|])
   >>= newForeignPtr deleteJitModule
 
 jitModuleNumberOfSlots mod = [C.exp|int { $fptr-ptr:(JitScriptModule *mod)->num_slots() }|]
@@ -500,8 +514,14 @@ jitModuleNumberOfSlots mod = [C.exp|int { $fptr-ptr:(JitScriptModule *mod)->num_
 jitModueToBackend mod backend = [C.exp|void { $fptr-ptr:(JitScriptModule *mod)->to(at::Device(static_cast<c10::DeviceType>($(int backend)), -1)) }|]
 
 jitModuleSlotName mod slotNr =
-  [C.exp|char *{ (char*)$fptr-ptr:(JitScriptModule *mod)->get_slot($(int slotNr)).name().c_str() }|] >>= textPeekCString
+  [C.exp|char *{ (char*)$fptr-ptr:(JitScriptModule *mod)->type()->getAttributeName($(int slotNr)).c_str() }|] >>= textPeekCString
 
-jitModuleSlotType :: ForeignPtr CJitScriptModule -> CInt -> IO ModuleEntityType
-jitModuleSlotType mod slotNr =
-  toEnum . fromIntegral <$> [C.exp|int{ (int)$fptr-ptr:(JitScriptModule *mod)->get_slot($(int slotNr)).entity_type() }|]
+jitModuleSlotIsModule :: ForeignPtr CJitScriptModule -> CInt -> IO CBool
+jitModuleSlotIsModule mod slotNr = [C.exp|bool{ (int)$fptr-ptr:(JitScriptModule *mod)->type()->getAttribute($(int slotNr))->is_module() }|]
+
+jitModuleSlotIsParameter :: ForeignPtr CJitScriptModule -> CInt -> IO CBool
+jitModuleSlotIsParameter mod slotNr = [C.exp|bool{ (int)$fptr-ptr:(JitScriptModule *mod)->type()->is_parameter($(int slotNr)) }|]
+
+-- jitModuleSlotType :: ForeignPtr CJitScriptModule -> CInt -> IO ModuleEntityType
+-- jitModuleSlotType mod slotNr =
+--   toEnum . fromIntegral <$> [C.exp|int{ (int)$fptr-ptr:(JitScriptModule *mod)->get_slot($(int slotNr)).entity_type() }|]

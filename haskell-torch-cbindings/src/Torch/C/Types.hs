@@ -17,10 +17,10 @@ C.context C.cppCtx
 
 C.include "<torch/csrc/autograd/variable.h>"
 C.include "<torch/csrc/autograd/function.h>"
-C.include "<torch/csrc/jit/tracer.h>"
-C.include "<torch/csrc/jit/ir.h>"
-C.include "<torch/csrc/jit/script/module.h>"
-C.include "<torch/csrc/jit/script/slot.h>"
+C.include "<torch/csrc/jit/frontend/tracer.h>"
+C.include "<torch/csrc/jit/ir/ir.h>"
+C.include "<torch/csrc/jit/api/module.h>"
+C.include "<c10/core/MemoryFormat.h>"
 
 C.using "namespace at"
 C.using "namespace torch::autograd"
@@ -135,10 +135,8 @@ instance Enum ScalarType where
   fromEnum ScalarTypeDouble    = fromIntegral [C.pure|int { (int)ScalarType::Double }|]
   fromEnum ScalarTypeUndefined = fromIntegral [C.pure|int { (int)ScalarType::Undefined }|]
 
-data TypeKind = TypeKindTensor
-              | TypeKindDimensionedTensor
-              | TypeKindCompleteTensor
-              | TypeKindAutogradZeroTensor
+data TypeKind = TypeKindAny
+              | TypeKindTensor
               | TypeKindTuple
               | TypeKindList
               | TypeKindDict
@@ -152,17 +150,16 @@ data TypeKind = TypeKindTensor
               | TypeKindBool
               | TypeKindOptional
               | TypeKindVar
-              | TypeKindProfiledTensor
               | TypeKindDeviceObj
               | TypeKindFunction
               | TypeKindClass
+              | TypeKindCapsule
+              | TypeKindInterface
              deriving (Show, Eq)
 
 instance Enum TypeKind where
-  toEnum x | x == fromIntegral [C.pure|int { (int)TypeKind::TensorType }|] = TypeKindTensor
-           | x == fromIntegral [C.pure|int { (int)TypeKind::DimensionedTensorType }|] = TypeKindDimensionedTensor
-           | x == fromIntegral [C.pure|int { (int)TypeKind::CompleteTensorType }|] = TypeKindCompleteTensor
-           | x == fromIntegral [C.pure|int { (int)TypeKind::AutogradZeroTensorType }|] = TypeKindAutogradZeroTensor
+  toEnum x | x == fromIntegral [C.pure|int { (int)TypeKind::AnyType }|] = TypeKindAny
+           | x == fromIntegral [C.pure|int { (int)TypeKind::TensorType }|] = TypeKindTensor
            | x == fromIntegral [C.pure|int { (int)TypeKind::TupleType }|] = TypeKindTuple
            | x == fromIntegral [C.pure|int { (int)TypeKind::ListType }|] = TypeKindList
            | x == fromIntegral [C.pure|int { (int)TypeKind::DictType }|] = TypeKindDict
@@ -176,15 +173,14 @@ instance Enum TypeKind where
            | x == fromIntegral [C.pure|int { (int)TypeKind::BoolType }|] = TypeKindBool
            | x == fromIntegral [C.pure|int { (int)TypeKind::OptionalType }|] = TypeKindOptional
            | x == fromIntegral [C.pure|int { (int)TypeKind::VarType }|] = TypeKindVar
-           | x == fromIntegral [C.pure|int { (int)TypeKind::ProfiledTensorType }|] = TypeKindProfiledTensor
            | x == fromIntegral [C.pure|int { (int)TypeKind::DeviceObjType }|] = TypeKindDeviceObj
            | x == fromIntegral [C.pure|int { (int)TypeKind::FunctionType }|] = TypeKindFunction
            | x == fromIntegral [C.pure|int { (int)TypeKind::ClassType }|] = TypeKindClass
+           | x == fromIntegral [C.pure|int { (int)TypeKind::CapsuleType }|] = TypeKindCapsule
+           | x == fromIntegral [C.pure|int { (int)TypeKind::InterfaceType }|] = TypeKindInterface
            | otherwise = error "Cannot convert TypeKind to enum"
+  fromEnum TypeKindAny                = fromIntegral [C.pure|int { (int)TypeKind::AnyType }|]
   fromEnum TypeKindTensor             = fromIntegral [C.pure|int { (int)TypeKind::TensorType }|]
-  fromEnum TypeKindDimensionedTensor  = fromIntegral [C.pure|int { (int)TypeKind::DimensionedTensorType }|]
-  fromEnum TypeKindCompleteTensor     = fromIntegral [C.pure|int { (int)TypeKind::CompleteTensorType }|]
-  fromEnum TypeKindAutogradZeroTensor = fromIntegral [C.pure|int { (int)TypeKind::AutogradZeroTensorType }|]
   fromEnum TypeKindTuple              = fromIntegral [C.pure|int { (int)TypeKind::TupleType }|]
   fromEnum TypeKindList               = fromIntegral [C.pure|int { (int)TypeKind::ListType }|]
   fromEnum TypeKindDict               = fromIntegral [C.pure|int { (int)TypeKind::DictType }|]
@@ -198,10 +194,11 @@ instance Enum TypeKind where
   fromEnum TypeKindBool               = fromIntegral [C.pure|int { (int)TypeKind::BoolType }|]
   fromEnum TypeKindOptional           = fromIntegral [C.pure|int { (int)TypeKind::OptionalType }|]
   fromEnum TypeKindVar                = fromIntegral [C.pure|int { (int)TypeKind::VarType }|]
-  fromEnum TypeKindProfiledTensor     = fromIntegral [C.pure|int { (int)TypeKind::ProfiledTensorType }|]
   fromEnum TypeKindDeviceObj          = fromIntegral [C.pure|int { (int)TypeKind::DeviceObjType }|]
   fromEnum TypeKindFunction           = fromIntegral [C.pure|int { (int)TypeKind::FunctionType }|]
   fromEnum TypeKindClass              = fromIntegral [C.pure|int { (int)TypeKind::ClassType }|]
+  fromEnum TypeKindCapsule            = fromIntegral [C.pure|int { (int)TypeKind::CapsuleType }|]
+  fromEnum TypeKindInterface          = fromIntegral [C.pure|int { (int)TypeKind::InterfaceType }|]
 
 data Reduction = ReductionNone
                | ReductionMean
@@ -227,9 +224,9 @@ instance Enum MemoryFormat where
            | x == fromIntegral [C.pure|int { (int)MemoryFormat::Preserve }|]     = MemoryFormatPreserve
            | x == fromIntegral [C.pure|int { (int)MemoryFormat::ChannelsLast }|] = MemoryFormatChannelsLast
            | otherwise = error "Cannot convert MemoryFormat to enum"
-  fromEnum MemoryFormatContiguous   = fromIntegral [C.pure|int { (int)MemoryFormat::Contiguous }|]
-  fromEnum MemoryFormatPreserve     = fromIntegral [C.pure|int { (int)MemoryFormat::Preserve }|]
-  fromEnum MemoryFormatChannelsLast = fromIntegral [C.pure|int { (int)MemoryFormat::ChannelsLast }|]
+  fromEnum MemoryFormatContiguous     = fromIntegral [C.pure|int { (int)MemoryFormat::Contiguous }|]
+  fromEnum MemoryFormatPreserve       = fromIntegral [C.pure|int { (int)MemoryFormat::Preserve }|]
+  fromEnum MemoryFormatChannelsLast   = fromIntegral [C.pure|int { (int)MemoryFormat::ChannelsLast }|]
 
 data AttributeKind = AttributeKindFloat
                    | AttributeKindFloats
@@ -266,23 +263,6 @@ instance Enum AttributeKind where
   fromEnum AttributeKindGraph   = fromIntegral [C.pure|int { (int)JitAttributeKind::g }|]
   fromEnum AttributeKindGraphs  = fromIntegral [C.pure|int { (int)JitAttributeKind::gs }|]
 
-data ModuleEntityType = ModuleEntityType
-                      | ParameterEntityType
-                      | AttributeEntityType
-                      | MethodEntityType
-             deriving (Show, Eq)
-
-instance Enum ModuleEntityType where
-  toEnum x | x == fromIntegral [C.pure|int { (int)torch::jit::script::EntityType::MODULE }|]  = ModuleEntityType
-           | x == fromIntegral [C.pure|int { (int)torch::jit::script::EntityType::PARAMETER }|] = ParameterEntityType
-           | x == fromIntegral [C.pure|int { (int)torch::jit::script::EntityType::ATTRIBUTE }|] = AttributeEntityType
-           | x == fromIntegral [C.pure|int { (int)torch::jit::script::EntityType::METHOD }|] = MethodEntityType
-           | otherwise = error "Cannot convert ModuleEntityType to enum"
-  fromEnum ModuleEntityType    = fromIntegral [C.pure|int { (int)torch::jit::script::EntityType::MODULE }|]
-  fromEnum ParameterEntityType = fromIntegral [C.pure|int { (int)torch::jit::script::EntityType::PARAMETER }|]
-  fromEnum AttributeEntityType = fromIntegral [C.pure|int { (int)torch::jit::script::EntityType::ATTRIBUTE }|]
-  fromEnum MethodEntityType    = fromIntegral [C.pure|int { (int)torch::jit::script::EntityType::METHOD }|]
-
 cstorable ''CTensorOptions            "TensorOptions"
 cstorable ''CVariable                 "Variable"
 cstorable ''CTensor                   "Tensor"
@@ -297,3 +277,8 @@ cstorable ''CJitIValue                "JitIValue"
 cstorable ''CJitBlock                 "JitBlock"
 cstorable ''CType                     "JitType"
 cstorable ''CJitScriptModule          "JitScriptModule"
+
+data ModuleEntityType = ModuleEntityType
+                      | ParameterEntityType
+                      | MethodEntityType
+             deriving (Show, Eq)

@@ -374,7 +374,7 @@ instance (TensorConstraints ty ki '[hiddenF, inF], SingI inF, SingI hiddenF, Kno
         -- _cudnn_rnn_flatten_weight can make all of our weights contiguous.
         placeholder <- C.undefinedTensor
         genericRNN (\_ _ params has_bias nrLayers _ _ bidi batchFirst -> do
-                      C._cudnn_rnn_flatten_weight params
+                      C._cudnn_rnn_flatten_weight__l66666bb params
                        -- This looks strange, but it's a reminder that we need
                        -- to set the stride correctly. If there is a bias, the
                        -- stride is 4, otherwise it's 2.

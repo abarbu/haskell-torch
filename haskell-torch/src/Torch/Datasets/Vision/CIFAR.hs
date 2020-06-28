@@ -49,7 +49,7 @@ remoteDatasetCIFAR root filename directory url md5 =
         dirpath x = root </> directory </> x
         checkAll = checkMD5 path md5
         fetchAll force = do
-          liftIO $ createDirectoryIfMissing root
+          liftIO $ createDirectoryIfMissing' root
           checkMD5 path md5 `retryAfter` downloadUrl url path
           e <- liftIO $ doesDirectoryExist (root </> directory)
           when (force || not e) $ extractTar path root

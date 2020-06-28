@@ -210,7 +210,7 @@ addGraph summary name trace = do
   (inputs, nodes, outputs, ret, block) <-
     withForeignPtr trace C.tracing_state_graph
   inputs' <- mapM (\i -> do
-                    b <- cbool <$> C.value_is_tensor i
+                    b <- cbool <$> C.check_value_tensor i
                     na <- T.pack <$> C.value_name i
                     if b then do
                       sz <- C.value_sizes i
@@ -239,7 +239,7 @@ addGraph summary name trace = do
                               C.AttributeKindTensor -> do
                                 tensor <- C.node_get_attribute_tensor n "value"
                                 ty <- C.getType tensor
-                                tensor' <- C.contiguous tensor (fromIntegral $ fromEnum C.MemoryFormatContiguous)
+                                tensor' <- C.contiguous_mm tensor (fromIntegral $ fromEnum C.MemoryFormatContiguous)
                                 ptr <- newForeignPtr_ =<< castPtr <$> C.data_ptr tensor'
                                 len <- fromIntegral <$> C.numel tensor'
                                 let get :: V.Storable a => [a]
