@@ -223,31 +223,37 @@ We'd love to have more models, more datasets, more layers, more tutorials,
 etc. Head over to one of the many big libraries that PyTorch has an port over
 features. 
 
-Two guidelines for contributing: we want fast code and we want code that
-supports all of the options the original does. Horrible code that is fast is
-infinitely better than elegant but slow code. Refactoring in Haskell is awesome
-and simple so we can clean code up, but every slow piece of code we have is
-technical debt and a showstopper for anyone that happens to depend on it. Better
-to be upfront about not having a feature than to have a slow non-replacement for
-that feature. If you add a feature, add every option that exists for that
-feature. You will notice that our functions take a lot options! Don't be
-shy. That's life in the ML world and the only alternative is to dumb things
-down, but then they stop being useful for serious research and
-development. Every feature we add that is missing options is technical debt we
-have to pay. We want people to have confidence that when the library says it
-does X, it does it well and it does it comprehensively. No surprises.
+Three guidelines for contributing: we want fast code, we want code that works
+exactly like the pytorch code in every way, and we want code that supports all
+of the options the original does. Horrible code that is fast is infinitely
+better than elegant but slow code! Refactoring in Haskell is awesome so we can
+clean code up, but every slow piece of code we have is technical debt and a
+showstopper for anyone that happens to depend on it. Better to be upfront about
+not having a feature than to have a slow non-replacement for that feature.
+
+If you add a model, that model must be exactly the same as the original. No
+shortcuts. This includes every parameter, dropout layers, inplace operations,
+etc. It should produce floating-point equivalent results to the pytorch model.
+
+If you add a feature, add every option that exists for that feature. You will
+notice that our functions take a lot options! Don't be shy. That's life in the
+ML world and the only alternative is to dumb things down, but then they stop
+being useful for serious research and development. Every feature we add that is
+missing options is technical debt we have to pay. We want people to have
+confidence that when the library says it does X, it does it well and it does it
+comprehensively. No surprises.
 
 * How does this compare feature-wise to PyTorch?
 
 This library includes most common features and roughly two thirds of all of the
 features you would find in PyTorch and torchvision. We will soon reach feature
 parity. You will find that some functions are less polymorphic and split up into
-several alternatives, so the mapping between the two is not one to one. Data
-loading and how networks are written is also rather different. The major
-features unavailable at the moment are sparse tensors and a few scalar types
-like complex numbers. They're rarely seen in the real world at the moment and
-the overhead of adding them in vs focusing on other features hasn't been worth
-it so far.
+several alternatives, so the mapping between pytorch and haskell-torch the two
+is not one to one. Data loading and how networks are written is rather
+different. The major features unavailable at the moment are sparse tensors and a
+few scalar types like complex numbers. They're rarely seen in the real world at
+the moment and the overhead of adding them in vs. focusing on other features
+hasn't been worth it so far.
 
 * I have a PyTorch module, how do I translate it to Haskell-Torch?
 
@@ -286,12 +292,11 @@ Check out `Tensor.allclose`
   broadcasting, what now?
 
 GHC really needs to give us a handle to such ambiguities so that we can resolve
-them with plugins. Until then, you have two types of tools. `Tensor.like` takes
+them with plugins. Until then, you have two kinds of tools. `Tensor.like` takes
 two tensors and returns the second unchanged while making sure that its type is
 like that of the former. `Tensor.like a b` returns b and makes sure its type is
-the same as a. Second, you can annotate tensors with many properties like as
-size, see `Tensor.sized`, `Tensor.typed`, `Tensor.stored`, and similar
-functions.
+the same as a. Second, you can annotate tensors with properties like size, see
+`Tensor.sized`, `Tensor.typed`, `Tensor.stored`, and similar functions.
 
 * Why install with Conda instead of doing everything manually or using nix?
 
@@ -369,6 +374,6 @@ Some minor usability requests, although one can live without these:
     of them in the same flat namespace is a mess and asking users to copy and
     paste an import block is not practical. Users can't be asked to constantly
     update that import block as the shape of the library changes.
- 8. Type argument support. We need to be able to annotate which type parameters
+ 7. Type argument support. We need to be able to annotate which type parameters
     are actually meant to be arguments in Haddock. Documentation is far too hard
     to read without this.
