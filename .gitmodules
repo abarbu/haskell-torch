@@ -5,3 +5,6 @@
 	path = ihaskell
 	url = https://github.com/gibiansky/IHaskell
         ignore = dirty
+[submodule "generics-eot"]
+	path = generics-eot
+	url = https://github.com/soenkehahn/generics-eot.git
