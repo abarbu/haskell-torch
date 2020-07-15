@@ -110,7 +110,7 @@ echo "======================================================================"
 echo "Building"
 echo "======================================================================"
 
-stack build haskell-torch --fast || { echo "Failed to build haskell-torch! :("; exit 1 }
+stack build haskell-torch --fast || { echo "Failed to build haskell-torch! :("; exit 1; }
 
 echo "======================================================================"
 echo "We are now setting up jupyter / ihaskell"
