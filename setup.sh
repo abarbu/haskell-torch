@@ -74,7 +74,7 @@ fi
 
 mkdir -p $CONDA_PREFIX/etc/conda/activate.d/
 echo "export OLD_LD_PRELOAD=\$LD_PRELOAD" > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
-echo "export LD_PRELOAD=\$LD_PRELOAD:$CONDA_PREFIX/lib/libtinfo.so:$CONDA_PREFIX/lib/libtinfow.so:$CONDA_PREFIX/lib/libmkl_core.so:$CONDA_PREFIX/lib/libmkl_sequential.so" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+echo "export LD_PRELOAD=\$LD_PRELOAD:$CONDA_PREFIX/lib/libtinfo.so:$CONDA_PREFIX/lib/libtinfow.so:$CONDA_PREFIX/lib/libmkl_core.so:$CONDA_PREFIX/lib/libmkl_sequential.so:$CONDA_PREFIX/lib/libmkl_intel_lp64.so" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 echo "export OLD_LD_LIBRARY_PATH=\$LD_LIBRARY_PATH" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:$CONDA_PREFIX/lib:$CONDA_PREFIX/lib/python3.6/site-packages/torch/lib/" >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 chmod a+x $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
