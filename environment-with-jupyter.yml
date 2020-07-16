@@ -29,3 +29,4 @@ dependencies:
   - jupyter_core==4.5.0
   - tornado<6
   - jupyterlab
+  - nb_conda_kernels
