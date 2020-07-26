@@ -16,7 +16,7 @@ dependencies:
   - matplotlib
   - tensorboard
   - tensorflow
-  - cudatoolkit=10.1
+  - cpuonly
   - torchvision
   # These are only required for jupyter & IHaskell
   - jupyter

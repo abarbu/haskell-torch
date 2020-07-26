@@ -46,9 +46,7 @@ defaults_yaml = """- &pytorchdefaults
   extra-lib-dirs:
     - {1}/lib/
     - {2}/lib/
-  # NB -dynamic is for ghcide
   ghc-options:
-    - -dynamic
     - -pgmlg++
     - -optc-std=c++11
     - -optc-DNO_PYTHON
@@ -60,21 +58,16 @@ defaults_yaml = """- &pytorchdefaults
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -lstdc++
-    - -lnvToolsExt
-    - -lhdf5
-    - -lhdf5_hl
-    - -ltorch
-    - -lMagickWand-7.Q16HDRI
-    - -lMagickCore-7.Q16HDRI
   extra-libraries:
     - stdc++
-    - nvToolsExt
     - hdf5
     - hdf5_hl
+    - c10
     - torch
+    - torch_cpu
     - MagickWand-7.Q16HDRI
     - MagickCore-7.Q16HDRI
+    {5}
   include-dirs:
     - {1}/include/
     - {1}/include/ImageMagick-7/
@@ -115,11 +108,6 @@ extra-include-dirs:
 extra-lib-dirs:
   - {0}/lib/
   - {1}/lib/
-
-# NB This is for ghcide
-
-ghc-options:
-  "$everything": -dynamic
 """
 
 with_cxx11_abi = 0
@@ -131,7 +119,11 @@ with open("config.yaml", "w") as f:
     f.write(defaults_yaml.format((1 if withCuda else 0),
                                  os.environ['CONDA_PREFIX'],
                                  pytorch_root,
-                                 with_cxx11_abi))
+                                 with_cxx11_abi,
+                                 """    - -lnvToolsExt
+	- -ltorch_cuda""" if withCuda else "",
+                                 """    - nvToolsExt
+	- torch_cuda""" if withCuda else ""))
 with open("stack.yaml", "w") as f:
     f.write(stack_yaml.format(os.environ['CONDA_PREFIX'],
                               pytorch_root,

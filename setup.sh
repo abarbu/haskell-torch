@@ -55,15 +55,31 @@ eval "$(conda shell.bash hook)"
 
 if conda activate haskell-torch ; then
     if [ $WITH_JUPYTER = "YES" ]; then
-        conda env update -n haskell-torch --file environment-with-jupyter.yml
+	if [ $WITH_CUDA = "YES" ]; then
+            conda env update -n haskell-torch --file environment-with-jupyter.yml
+	else
+            conda env update -n haskell-torch --file environment-with-jupyter-cpu-only.yml
+	fi
     else
-        conda env update -n haskell-torch --file environment.yml
+	if [ $WITH_CUDA = "YES" ]; then
+            conda env update -n haskell-torch --file environment.yml
+	else
+            conda env update -n haskell-torch --file environment-cpu-only.yml
+	fi
     fi
 else
     if [ $WITH_JUPYTER = "YES" ]; then
-        conda env create -f environment-with-jupyter.yml
+	if [ $WITH_CUDA = "YES" ]; then
+            conda env create -f environment-with-jupyter.yml
+	else
+            conda env create -f environment-with-jupyter-cpu-only.yml
+	fi
     else
-        conda env create -f environment.yml
+	if [ $WITH_CUDA = "YES" ]; then
+            conda env create -f environment.yml
+	else
+            conda env create -f environment.yml
+	fi
     fi
 fi
 
@@ -117,11 +133,13 @@ echo "We are now setting up jupyter / ihaskell"
 echo "======================================================================"
 
 if [ $WITH_JUPYTER = "YES" ]; then
-    patch --forward -p0 < ihaskell-dynamic.diff
-    stack install ihaskell --fast
-    stack exec -- ihaskell install --stack
+    patch --forward -p0 < ihaskell-dynamic.diff || { echo 'Failed to patch IHaskell' ; exit 1; }
+    stack install ihaskell --fast || { echo 'Failed to build IHaskell' ; exit 1; }
+    stack exec -- ihaskell install --stack || { echo 'Failed to install IHaskell' ; exit 1; }
+    jupyter labextension install jupyterlab-ihaskell
+    # TODO This is an alternate extension, not sure
+    # jupyter labextension install ihaskell_jupyterlab
     cd ihaskell/ihaskell_labextension
-    jupyter labextension install ihaskell_jupyterlab
     npm install
     npm run build
     jupyter labextension link .
