@@ -20,7 +20,7 @@ import qualified Language.C.Inline.Cpp as C
 import           Prelude               hiding (max, min)
 import           System.IO.Unsafe
 import           Torch.C.Types
-
+import           Torch.C.Language
 
 C.context (C.cppCtx <> tensorCtx)
 
@@ -36,14 +36,157 @@ C.include "<sstream>"
 C.include "<torch/csrc/autograd/engine.h>"
 C.include "<torch/csrc/autograd/grad_mode.h>"
 
+C.include "<torch/csrc/jit/frontend/tracer.h>"
+C.include "<torch/csrc/jit/ir/ir.h>"
+C.include "<torch/csrc/jit/api/module.h>"
+C.include "<c10/core/MemoryFormat.h>"
+
 C.include "<ATen/ArrayRef.h>"
 C.include "<torch/csrc/autograd/generated/VariableType.h>"
 -- C.include "<torch/csrc/autograd/generated/VariableTypeExtras.h>"
 
 C.using "namespace at"
 C.using "namespace torch::autograd"
+C.using "namespace torch::jit::tracer"
 
 C.verbatim "using edge_list = std::vector<torch::autograd::Edge>;"
+
+C.verbatim "using JitNode           = torch::jit::Node;"
+C.verbatim "using JitValue          = torch::jit::Value;"
+C.verbatim "using JitIValue         = torch::jit::IValue;"
+C.verbatim "using JitBlock          = torch::jit::Block;"
+C.verbatim "using JitType           = ::c10::Type;"
+C.verbatim "using JitAttributeKind  = torch::jit::AttributeKind;"
+C.verbatim "using JitScriptModule   = torch::jit::script::Module;"
+
+instance Enum ScalarType where
+  toEnum x | x == fromIntegral [C.pure|int { (int)ScalarType::Bool }|] = ScalarTypeBool
+           | x == fromIntegral [C.pure|int { (int)ScalarType::Byte }|] = ScalarTypeByte
+           | x == fromIntegral [C.pure|int { (int)ScalarType::Char }|] = ScalarTypeChar
+           | x == fromIntegral [C.pure|int { (int)ScalarType::Short }|] = ScalarTypeShort
+           | x == fromIntegral [C.pure|int { (int)ScalarType::Int }|] = ScalarTypeInt
+           | x == fromIntegral [C.pure|int { (int)ScalarType::Long }|] = ScalarTypeLong
+           | x == fromIntegral [C.pure|int { (int)ScalarType::Half }|] = ScalarTypeHalf
+           | x == fromIntegral [C.pure|int { (int)ScalarType::Float }|] = ScalarTypeFloat
+           | x == fromIntegral [C.pure|int { (int)ScalarType::Double }|] = ScalarTypeDouble
+           | x == fromIntegral [C.pure|int { (int)ScalarType::Undefined }|] = ScalarTypeUndefined
+           | otherwise = error $ "Cannot convert ScalarType value to enum " ++ show x
+  fromEnum ScalarTypeBool      = fromIntegral [C.pure|int { (int)ScalarType::Bool }|]
+  fromEnum ScalarTypeByte      = fromIntegral [C.pure|int { (int)ScalarType::Byte }|]
+  fromEnum ScalarTypeChar      = fromIntegral [C.pure|int { (int)ScalarType::Char }|]
+  fromEnum ScalarTypeShort     = fromIntegral [C.pure|int { (int)ScalarType::Short }|]
+  fromEnum ScalarTypeInt       = fromIntegral [C.pure|int { (int)ScalarType::Int }|]
+  fromEnum ScalarTypeLong      = fromIntegral [C.pure|int { (int)ScalarType::Long }|]
+  fromEnum ScalarTypeHalf      = fromIntegral [C.pure|int { (int)ScalarType::Half }|]
+  fromEnum ScalarTypeFloat     = fromIntegral [C.pure|int { (int)ScalarType::Float }|]
+  fromEnum ScalarTypeDouble    = fromIntegral [C.pure|int { (int)ScalarType::Double }|]
+  fromEnum ScalarTypeUndefined = fromIntegral [C.pure|int { (int)ScalarType::Undefined }|]
+
+instance Enum TypeKind where
+  toEnum x | x == fromIntegral [C.pure|int { (int)TypeKind::AnyType }|] = TypeKindAny
+           | x == fromIntegral [C.pure|int { (int)TypeKind::TensorType }|] = TypeKindTensor
+           | x == fromIntegral [C.pure|int { (int)TypeKind::TupleType }|] = TypeKindTuple
+           | x == fromIntegral [C.pure|int { (int)TypeKind::ListType }|] = TypeKindList
+           | x == fromIntegral [C.pure|int { (int)TypeKind::DictType }|] = TypeKindDict
+           | x == fromIntegral [C.pure|int { (int)TypeKind::NumberType }|] = TypeKindNumber
+           | x == fromIntegral [C.pure|int { (int)TypeKind::FloatType }|] = TypeKindFloat
+           | x == fromIntegral [C.pure|int { (int)TypeKind::FutureType }|] = TypeKindFuture
+           | x == fromIntegral [C.pure|int { (int)TypeKind::IntType }|] = TypeKindInt
+           | x == fromIntegral [C.pure|int { (int)TypeKind::NoneType }|] = TypeKindNone
+           | x == fromIntegral [C.pure|int { (int)TypeKind::StringType }|] = TypeKindString
+           | x == fromIntegral [C.pure|int { (int)TypeKind::GeneratorType }|] = TypeKindGenerator
+           | x == fromIntegral [C.pure|int { (int)TypeKind::BoolType }|] = TypeKindBool
+           | x == fromIntegral [C.pure|int { (int)TypeKind::OptionalType }|] = TypeKindOptional
+           | x == fromIntegral [C.pure|int { (int)TypeKind::VarType }|] = TypeKindVar
+           | x == fromIntegral [C.pure|int { (int)TypeKind::DeviceObjType }|] = TypeKindDeviceObj
+           | x == fromIntegral [C.pure|int { (int)TypeKind::FunctionType }|] = TypeKindFunction
+           | x == fromIntegral [C.pure|int { (int)TypeKind::ClassType }|] = TypeKindClass
+           | x == fromIntegral [C.pure|int { (int)TypeKind::CapsuleType }|] = TypeKindCapsule
+           | x == fromIntegral [C.pure|int { (int)TypeKind::InterfaceType }|] = TypeKindInterface
+           | otherwise = error "Cannot convert TypeKind to enum"
+  fromEnum TypeKindAny                = fromIntegral [C.pure|int { (int)TypeKind::AnyType }|]
+  fromEnum TypeKindTensor             = fromIntegral [C.pure|int { (int)TypeKind::TensorType }|]
+  fromEnum TypeKindTuple              = fromIntegral [C.pure|int { (int)TypeKind::TupleType }|]
+  fromEnum TypeKindList               = fromIntegral [C.pure|int { (int)TypeKind::ListType }|]
+  fromEnum TypeKindDict               = fromIntegral [C.pure|int { (int)TypeKind::DictType }|]
+  fromEnum TypeKindNumber             = fromIntegral [C.pure|int { (int)TypeKind::NumberType }|]
+  fromEnum TypeKindFloat              = fromIntegral [C.pure|int { (int)TypeKind::FloatType }|]
+  fromEnum TypeKindFuture             = fromIntegral [C.pure|int { (int)TypeKind::FutureType }|]
+  fromEnum TypeKindInt                = fromIntegral [C.pure|int { (int)TypeKind::IntType }|]
+  fromEnum TypeKindNone               = fromIntegral [C.pure|int { (int)TypeKind::NoneType }|]
+  fromEnum TypeKindString             = fromIntegral [C.pure|int { (int)TypeKind::StringType }|]
+  fromEnum TypeKindGenerator          = fromIntegral [C.pure|int { (int)TypeKind::GeneratorType }|]
+  fromEnum TypeKindBool               = fromIntegral [C.pure|int { (int)TypeKind::BoolType }|]
+  fromEnum TypeKindOptional           = fromIntegral [C.pure|int { (int)TypeKind::OptionalType }|]
+  fromEnum TypeKindVar                = fromIntegral [C.pure|int { (int)TypeKind::VarType }|]
+  fromEnum TypeKindDeviceObj          = fromIntegral [C.pure|int { (int)TypeKind::DeviceObjType }|]
+  fromEnum TypeKindFunction           = fromIntegral [C.pure|int { (int)TypeKind::FunctionType }|]
+  fromEnum TypeKindClass              = fromIntegral [C.pure|int { (int)TypeKind::ClassType }|]
+  fromEnum TypeKindCapsule            = fromIntegral [C.pure|int { (int)TypeKind::CapsuleType }|]
+  fromEnum TypeKindInterface          = fromIntegral [C.pure|int { (int)TypeKind::InterfaceType }|]
+
+instance Enum Reduction where
+  toEnum x | x == fromIntegral [C.pure|int { (int)Reduction::None }|] = ReductionNone
+           | x == fromIntegral [C.pure|int { (int)Reduction::Mean }|] = ReductionMean
+           | x == fromIntegral [C.pure|int { (int)Reduction::Sum }|] = ReductionSum
+           | otherwise = error "Cannot convert Reduction to enum"
+  fromEnum ReductionNone = fromIntegral [C.pure|int { (int)Reduction::None }|]
+  fromEnum ReductionMean = fromIntegral [C.pure|int { (int)Reduction::Mean }|]
+  fromEnum ReductionSum  = fromIntegral [C.pure|int { (int)Reduction::Sum }|]
+
+instance Enum MemoryFormat where
+  toEnum x | x == fromIntegral [C.pure|int { (int)MemoryFormat::Contiguous }|]   = MemoryFormatContiguous
+           | x == fromIntegral [C.pure|int { (int)MemoryFormat::Preserve }|]     = MemoryFormatPreserve
+           | x == fromIntegral [C.pure|int { (int)MemoryFormat::ChannelsLast }|] = MemoryFormatChannelsLast
+           | otherwise = error "Cannot convert MemoryFormat to enum"
+  fromEnum MemoryFormatContiguous     = fromIntegral [C.pure|int { (int)MemoryFormat::Contiguous }|]
+  fromEnum MemoryFormatPreserve       = fromIntegral [C.pure|int { (int)MemoryFormat::Preserve }|]
+  fromEnum MemoryFormatChannelsLast   = fromIntegral [C.pure|int { (int)MemoryFormat::ChannelsLast }|]
+
+instance Enum AttributeKind where
+  toEnum x | x == fromIntegral [C.pure|int { (int)JitAttributeKind::f }|]  = AttributeKindFloat
+           | x == fromIntegral [C.pure|int { (int)JitAttributeKind::fs }|] = AttributeKindFloats
+           | x == fromIntegral [C.pure|int { (int)JitAttributeKind::i }|]  = AttributeKindInt
+           | x == fromIntegral [C.pure|int { (int)JitAttributeKind::is }|] = AttributeKindInts
+           | x == fromIntegral [C.pure|int { (int)JitAttributeKind::s }|]  = AttributeKindString
+           | x == fromIntegral [C.pure|int { (int)JitAttributeKind::ss }|] = AttributeKindStrings
+           | x == fromIntegral [C.pure|int { (int)JitAttributeKind::t }|]  = AttributeKindTensor
+           | x == fromIntegral [C.pure|int { (int)JitAttributeKind::ts }|] = AttributeKindTensors
+           | x == fromIntegral [C.pure|int { (int)JitAttributeKind::g }|]  = AttributeKindGraph
+           | x == fromIntegral [C.pure|int { (int)JitAttributeKind::gs }|] = AttributeKindGraphs
+           | otherwise = error "Cannot convert AttributeKind to enum"
+  fromEnum AttributeKindFloat   = fromIntegral [C.pure|int { (int)JitAttributeKind::f }|]
+  fromEnum AttributeKindFloats  = fromIntegral [C.pure|int { (int)JitAttributeKind::fs }|]
+  fromEnum AttributeKindInt     = fromIntegral [C.pure|int { (int)JitAttributeKind::i }|]
+  fromEnum AttributeKindInts    = fromIntegral [C.pure|int { (int)JitAttributeKind::is }|]
+  fromEnum AttributeKindString  = fromIntegral [C.pure|int { (int)JitAttributeKind::s }|]
+  fromEnum AttributeKindStrings = fromIntegral [C.pure|int { (int)JitAttributeKind::ss }|]
+  fromEnum AttributeKindTensor  = fromIntegral [C.pure|int { (int)JitAttributeKind::t }|]
+  fromEnum AttributeKindTensors = fromIntegral [C.pure|int { (int)JitAttributeKind::ts }|]
+  fromEnum AttributeKindGraph   = fromIntegral [C.pure|int { (int)JitAttributeKind::g }|]
+  fromEnum AttributeKindGraphs  = fromIntegral [C.pure|int { (int)JitAttributeKind::gs }|]
+
+instance Enum Backend where
+  toEnum x | x == fromIntegral [C.pure|int { (int)kCPU }|] = BackendCPU
+           | x == fromIntegral [C.pure|int { (int)kCUDA }|] = BackendCUDA
+           | otherwise = error "Cannot convert value to enum"
+  fromEnum BackendCPU  = fromIntegral [C.pure|int { (int)kCPU }|]
+  fromEnum BackendCUDA = fromIntegral [C.pure|int { (int)kCUDA }|]
+
+cstorable ''CTensorOptions            "TensorOptions"
+cstorable ''CVariable                 "Variable"
+cstorable ''CTensor                   "Tensor"
+cstorable ''CScalar                   "Scalar"
+cstorable ''CStorage                  "Storage"
+cstorable ''CGenerator                "Generator"
+cstorable ''CNode                     "Node"
+cstorable ''CDevice                   "Device"
+cstorable ''CJitNode                  "JitNode"
+cstorable ''CJitValue                 "JitValue"
+cstorable ''CJitIValue                "JitIValue"
+cstorable ''CJitBlock                 "JitBlock"
+cstorable ''CType                     "JitType"
+cstorable ''CJitScriptModule          "JitScriptModule"
 
 -- TODO concurrent calls to backward?
 backward1 :: ForeignPtr CTensor -> CBool -> CBool -> IO ()
@@ -104,6 +247,8 @@ C.verbatim "std::array<bool,2> make_array_bool_2(bool *arr) { return std::array<
 C.verbatim "std::array<bool,3> make_array_bool_3(bool *arr) { return std::array<bool,3>{arr[0], arr[1], arr[2]}; }"
 C.verbatim "std::array<bool,4> make_array_bool_4(bool *arr) { return std::array<bool,4>{arr[0], arr[1], arr[2], arr[3]}; }"
 
+-- TODO This is gross..
+C.verbatim "extern \"C\" void delete_scalar1(Scalar* o) { delete o; }"
 C.verbatim "extern \"C\" void delete_tensor(Tensor* o) { delete o; }"
 C.verbatim "extern \"C\" void delete_tensor_storage(Tensor* o) { free(o->data_ptr()); }"
 C.verbatim "extern \"C\" void delete_tensor_options(TensorOptions* o) { delete(o); }"
@@ -114,7 +259,7 @@ foreign import ccall "&delete_tensor_options" deleteTensorOptions :: FunPtr (Ptr
 
 -- TODO We should just not export this, but we're not at the stage where we
 -- handle export lists yet.
-foreign import ccall "&delete_scalar" deleteScalar' :: FunPtr (Ptr CScalar -> IO ())
+foreign import ccall "&delete_scalar1" deleteScalar' :: FunPtr (Ptr CScalar -> IO ())
 
 undefinedTensor :: IO (ForeignPtr CTensor)
 undefinedTensor = [C.block|Tensor* { return new Tensor(); }|] >>= newForeignPtr deleteTensor
