@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    - path: ./haskell-torch-cbindings
+      component: "haskell-torch-cbindings:lib"
+    - path: ./haskell-torch-tools
+      component: "haskell-torch-tools:exe:haskell-torch-tools-generate-ctensor"
+    - path: ./haskell-torch
+      component: "haskell-torch:lib"
