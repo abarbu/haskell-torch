@@ -121,9 +121,9 @@ with open("config.yaml", "w") as f:
                                  pytorch_root,
                                  with_cxx11_abi,
                                  """    - -lnvToolsExt
-	- -ltorch_cuda""" if withCuda else "",
+    - -ltorch_cuda""" if withCuda else "",
                                  """    - nvToolsExt
-	- torch_cuda""" if withCuda else ""))
+    - torch_cuda""" if withCuda else ""))
 with open("stack.yaml", "w") as f:
     f.write(stack_yaml.format(os.environ['CONDA_PREFIX'],
                               pytorch_root,
