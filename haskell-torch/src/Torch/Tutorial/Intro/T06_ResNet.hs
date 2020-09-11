@@ -3,8 +3,8 @@
 {-# LANGUAGE RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TypeApplications, TypeFamilies, TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType, TypeOperators, UndecidableInstances                                                                           #-}
 {-# OPTIONS_GHC -fconstraint-solver-iterations=10 #-}
-{-# OPTIONS_GHC -fplugin-opt GHC.TypeLits.Normalise -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise -fplugin GHC.TypeLits.KnownNat.Solver -fplugin Plugin.SimplifyNat #-}
 
 module Torch.Tutorial.Intro.T06_ResNet where
 import           Control.Monad
@@ -13,6 +13,7 @@ import           Data.IORef
 import           Data.String.InterpolateIO
 import           GHC.Generics
 import           Torch
+import           GHC.TypeNats
 
 imageTransformsTrain x = transformSampleObject
   (constantPad @4 @4 0 0 0

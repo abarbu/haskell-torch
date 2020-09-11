@@ -1,0 +1,50 @@
+name:                default-type-plugin
+version:             0.1
+synopsis:            Unlock the power of type defaulting
+description:         Tired of ambiguity errors? Want a more powerful defaulting mechanism?
+                     Look no further.
+homepage:            http://github.com/abarbu/haskell-torch/default-type-plugin
+bug-reports:         http://github.com/abarbu/haskell-torch/default-type-plugin
+license:             BSD2
+license-file:        LICENSE
+author:              Andrei Barbu
+maintainer:          andrei@0xab.com
+copyright:           Copyright © 2020 Andrei Barbu
+category:            Type System
+build-type:          Simple
+extra-source-files:  README.md
+                     CHANGELOG.md
+cabal-version:       >=1.10
+
+source-repository head
+  type: git
+  location: https://github.com/abarbu/default-type-plugin.git
+
+flag deverror
+  description:
+    Enables `-Werror` for development mode and TravisCI
+  default: False
+  manual: True
+
+library
+  exposed-modules:     Plugin.DefaultType
+  build-depends:       base >= 4.8,
+                       ghc  >= 8.10.2,
+                       containers
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+
+test-suite test-default-type-plugin
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  Other-Modules:       ErrorTests
+  build-depends:       base                      >= 4.8 && <5,
+                       default-type-plugin,
+                       ghc-typelits-knownnat,
+                       tasty                     >= 0.10,
+                       tasty-hunit               >= 0.9,
+                       template-haskell          >= 2.11.0.0
+  hs-source-dirs:      tests
+  default-language:    Haskell2010
+  if flag(deverror)
+    ghc-options:       -O0 -dcore-lint

@@ -84,6 +84,8 @@ library:
     - zlib
     - monad-logger
     - docopt
+    - default-type-plugin
+    - simplify-nat-algebra-plugin
 
 tests:
   doctest:

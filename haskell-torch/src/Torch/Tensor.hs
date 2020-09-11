@@ -489,7 +489,7 @@ gradient (Tensor ptr x) = do
            Nothing
 
 clearGradinet :: Tensor ty ki sz -> IO ()
-clearGradinet t@(Tensor ptr _) = do
+clearGradinet (Tensor ptr _) = do
   g <- CV.grad (castForeignPtr ptr)
   def <- C.is_defined (castForeignPtr g)
   when (cbool def) $ (C.zero___t (castForeignPtr g) >> pure ())

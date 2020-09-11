@@ -1,6 +1,7 @@
-{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, ExtendedDefaultRules, FlexibleContexts, FlexibleInstances, GADTs, OverloadedStrings #-}
+{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, ExtendedDefaultRules, FlexibleContexts, FlexibleInstances, GADTs, OverloadedStrings, MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds, QuasiQuotes, RankNTypes, ScopedTypeVariables, TemplateHaskell, TypeApplications, TypeFamilies                  #-}
 {-# LANGUAGE TypeFamilyDependencies, TypeInType, TypeOperators, UndecidableInstances                                                   #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise -fplugin GHC.TypeLits.KnownNat.Solver -fplugin Plugin.DefaultType #-}
 
 -- | This example shows you Haskell & PyTorch code right next to one
 -- another. You get an idea of how the two are related and how to do so some of
@@ -26,9 +27,13 @@ import           Torch.Datasets.Vision.CIFAR
 -- | Basic autograd
 ex1 = do
   setSeed 0
-  s <- stored @KCpu <$> toScalar (float 1)
+  -- You can specify the device if you want to like so:
+  --  s <- stored @KCpu <$> toScalar (float 1)
+  -- Or, you can rely on Plugin.DefaultType to guess what you might want
+  -- Without that plugin, you will get an ambiguous type error.
+  s <- toScalar (float 1)
   -- Create tensors.
-  x <- stored @KCpu <$> (needGrad =<< toScalar (float 1))
+  x <- needGrad =<< toScalar (float 1)
   w <- needGrad =<< toScalar (float 2)
   b <- needGrad =<< toScalar (float 3)
   putStrLn =<< [c|X: #{x}
@@ -48,7 +53,11 @@ ex2 = do
   unsafeEnableGrad
   setSeed 0
   -- Create tensors of shape (10, 3) and (10, 2).
-  x <- typed @TFloat <$> stored @KCpu <$> sized (size_ @'[10,3]) <$> randn
+  -- You can specify the type and/or the device
+  --  x <- typed @TFloat <$> stored @KCpu <$> sized (size_ @'[10,3]) <$> randn
+  -- Or you can let Plugin.DefaultType guess these types for you
+  -- It will prefer TFloat when it can fit it in, if not TInt, and onwards from there.
+  x <- sized (size_ @'[10,3]) <$> randn
   y <- sized (size_ @'[10,2]) <$> randn
   -- Weights and biases for a linear layer.
   w <- gradP
@@ -161,7 +170,7 @@ ex8 = do
   unsafeEnableGrad
   setSeed 0
   -- Create tensors of shape (10, 3) and (10, 2).
-  x <- typed @TFloat <$> stored @KCpu <$> sized (size_ @'[7,5]) <$> randn
+  x <- sized (size_ @'[7,5]) <$> randn
   y <- sized (size_ @'[7,2]) <$> randn
   -- Weights and biases for a fully connected layer
   w <- noGradP

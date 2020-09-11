@@ -11,3 +11,6 @@ haskell-torch.cabal
 *~
 progress.org
 notes.org
+old/
+c++-example
+*.lock

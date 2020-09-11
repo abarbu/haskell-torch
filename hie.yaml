@@ -1,8 +1,12 @@
 cradle:
   stack:
-    - path: ./haskell-torch-cbindings
+    - path: "./haskell-torch-cbindings"
       component: "haskell-torch-cbindings:lib"
-    - path: ./haskell-torch-tools
+    - path: "./haskell-torch-tools"
       component: "haskell-torch-tools:exe:haskell-torch-tools-generate-ctensor"
-    - path: ./haskell-torch
+    - path: "./haskell-torch"
       component: "haskell-torch:lib"
+    - path: "./default-type-plugin"
+      component: "default-type-plugin:lib"
+    - path: "./simplify-nat-algebra-plugin"
+      component: "simplify-nat-algebra-plugin:lib"

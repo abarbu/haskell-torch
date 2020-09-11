@@ -7,7 +7,6 @@
 -- | MNIST <http://yann.lecun.com/exdb/mnist/> Dataset
 
 module Torch.Datasets.Vision.MNIST where
-import           Control.Monad            (liftM, when)
 import           Control.Monad.Except
 import           Data.Binary.Get          (Get, getByteString, getWord32be, runGet)
 import qualified Data.ByteString          as BS

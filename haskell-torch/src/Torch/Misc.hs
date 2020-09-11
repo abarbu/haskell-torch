@@ -53,9 +53,10 @@ demoteIntV = V.fromList (map fromIntegral (demote @a))
 
 type Sing2 x y = (SingI x, SingI y)
 type Sing3 x y z = (SingI x, SingI y, SingI z)
-type NonzeroSing x = (SingI x, (x > 0) ~ True)
-type NonzeroSing2 x y = (SingI x, SingI y, (x > 0) ~ True, (y > 0) ~ True)
-type NonzeroSing3 x y z = (SingI x, SingI y, SingI z, (x > 0) ~ True, (y > 0) ~ True, (z > 0) ~ True)
+
+type NonzeroSing x = (SingI x, 1 TL.<= x)
+type NonzeroSing2 x y = (SingI x, SingI y, 1 TL.<= x, 1 TL.<= y)
+type NonzeroSing3 x y z = (SingI x, SingI y, SingI z, 1 TL.<= x, 0 TL.<= y, 0 TL.<= z)
 
 -- * A potential type defaulting mechanism
 -- TODO Should remove this, it never worked out

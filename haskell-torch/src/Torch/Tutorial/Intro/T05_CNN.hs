@@ -1,7 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes, DataKinds, DeriveAnyClass, DeriveGeneric, ExtendedDefaultRules, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings, PolyKinds, QuasiQuotes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TypeApplications       #-}
 {-# LANGUAGE TypeFamilies, TypeOperators                                                                                              #-}
-{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise -fplugin GHC.TypeLits.KnownNat.Solver #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise -fplugin GHC.TypeLits.KnownNat.Solver -fplugin Plugin.SimplifyNat -fconstraint-solver-iterations=10000 #-}
 
 module Torch.Tutorial.Intro.T05_CNN where
 import           Control.Monad
@@ -10,6 +10,7 @@ import           Data.IORef
 import           Data.String.InterpolateIO
 import           GHC.Generics
 import           Torch
+import           GHC.TypeNats
 
 data SmallCNN = SmallCNN {
     w1  :: ConvParam   TFloat KCpu 16 '[1, 5, 5]

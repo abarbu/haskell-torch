@@ -5,6 +5,7 @@
 {-# OPTIONS_GHC -fconstraint-solver-iterations=10 -fdefer-typed-holes #-}
 {-# OPTIONS_GHC -fplugin-opt GHC.TypeLits.Normalise -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
+{-# OPTIONS_GHC -fplugin Plugin.SimplifyNat #-}
 
 module Torch.Tutorial.Intro.T07_RNN where
 import           Control.Monad

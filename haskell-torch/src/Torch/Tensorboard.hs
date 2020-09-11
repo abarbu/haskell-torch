@@ -1,13 +1,14 @@
 {-# LANGUAGE AllowAmbiguousTypes, CPP, ConstraintKinds, DataKinds, FlexibleContexts, FlexibleInstances, GADTs, MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedLabels, OverloadedStrings, PartialTypeSignatures, PolyKinds, QuasiQuotes, RankNTypes, ScopedTypeVariables     #-}
 {-# LANGUAGE TypeApplications, TypeFamilyDependencies, TypeInType, TypeOperators, UndecidableInstances                               #-}
-{-# options_ghc -fplugin GHC.TypeLits.KnownNat.Solver #-}
-{-# options_ghc -Wno-partial-type-signatures -fconstraint-solver-iterations=10 #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise -fplugin GHC.TypeLits.KnownNat.Solver #-}
+{-# OPTIONS_GHC -Wno-partial-type-signatures -fconstraint-solver-iterations=10 #-}
 
-{-| Talk 
-to Tensorboard. You will need to run it manually with 'tensorboard --logdir <yourdir>'.
-It will occasionally update on its own.
-We have fairly comprehensive Tensorboard support and integration with showing images, plots, and graphs.
+{-| Talk to Tensorboard. You will need to run it manually with
+'tensorboard --logdir <yourdir>'
+
+It will occasionally update on its own.  We have fairly comprehensive
+Tensorboard support and integration with showing images, plots, and graphs.
 -}
 
 module Torch.Tensorboard where

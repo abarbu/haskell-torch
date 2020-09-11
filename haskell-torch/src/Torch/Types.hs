@@ -3,7 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses, OverloadedLabels, OverloadedStrings, PartialTypeSignatures, PolyKinds, QuasiQuotes, RankNTypes     #-}
 {-# LANGUAGE RecordWildCards, ScopedTypeVariables, TemplateHaskell, TypeApplications, TypeFamilies, TypeFamilyDependencies, TypeInType #-}
 {-# LANGUAGE TypeOperators, UndecidableInstances, StandaloneKindSignatures                                                             #-}
-{-# OPTIONS_GHC -pgmP cc -optP -E -optP -undef -optP -std=c89 #-}
+{-# OPTIONS_GHC -pgmP cc -optP -E -optP -undef -optP -std=c89 -Wall -fno-warn-unticked-promoted-constructors -fno-warn-orphans #-}
 
 -- | The basic types and type-level operators shared by all of Haskell-Torch.
 --
@@ -29,9 +29,7 @@ import           Data.Default
 import           Data.IORef
 import           Data.Singletons
 import           Data.Singletons.Prelude      as SP
-import           Data.Singletons.Prelude.List
 import           Data.Singletons.TH
-import           Data.Singletons.Decide
 import           Data.Singletons.TypeLits
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
@@ -54,7 +52,8 @@ import qualified Torch.C.Tensor               as C
 import qualified Torch.C.Types                as C
 import qualified Torch.C.Variable             as C
 import           Torch.Misc
-import           Unsafe.Coerce
+import           Plugin.DefaultType
+import           GHC.TypeLits(Nat)
 
 -- | The storage typeof the tensor we're dealing with. This will appearat the
 -- type level regularly.
@@ -122,13 +121,16 @@ genSingletons [''TensorType, ''TensorKind]
 singDecideInstances [''TensorType, ''TensorKind]
 
 -- * Many singletons for type-level operations.
+-- We would love to do this:
+--
 -- $(singletonsOnly [d|
 --   isScalarLike :: [Nat] -> Bool
 --   isScalarLike []    = True
 --   isScalarLike (h:t) = if h == 1 then isScalarLike t else False
 --  |])
-
-  -- isScalarLike (h:t) = product (h:t) == 1
+--
+-- But the resulting code leads to far worse types than writing everything by
+-- hand.
 
 -- | Are these two shapes expandable?
 type family ExpandTo (a::[Nat]) (b::[Nat]) :: Bool where
@@ -224,7 +226,7 @@ caseScalar :: forall ty ki (sz :: [Nat]) a.
            -> (Tensor ty ki sz -> a)
            -> Sing sz
            -> a
-caseScalar t y n SNil = y t
+caseScalar t y _ SNil = y t
 caseScalar t y n s =
   case s %~ SCons (sing :: Sing 1) SNil of
     Proved Refl -> y t
@@ -529,12 +531,12 @@ toDoubleC arg = case (sing :: Sing ty) of
 showScalarC :: forall (ty :: TensorType). (SingI ty)
             => TensorTyToHsC ty -> String
 showScalarC arg = case (sing :: Sing ty) of
-                   STBool   -> show $ fromIntegral arg
-                   STByte   -> show $ fromIntegral arg
-                   STChar   -> show $ fromIntegral arg
-                   STShort  -> show $ fromIntegral arg
-                   STInt    -> show $ fromIntegral arg
-                   STLong   -> show $ fromIntegral arg
+                   STBool   -> show $ (fromIntegral arg :: Int)
+                   STByte   -> show $ (fromIntegral arg :: Int)
+                   STChar   -> show $ (fromIntegral arg :: Int)
+                   STShort  -> show $ (fromIntegral arg :: Int)
+                   STInt    -> show $ (fromIntegral arg :: Int)
+                   STLong   -> show $ (fromIntegral arg :: Int)
                    STHalf   -> show $ arg
                    STFloat  -> show $ float2Double (coerce arg)
                    STDouble -> show $ (coerce arg :: Double)
@@ -558,7 +560,7 @@ showScalar arg = case (sing :: Sing ty) of
 -- | Internal
 fromCScalarTensor :: (IsScalarLike sz ~ True)
                   => Tensor ty ki sz -> IO (TensorTyToHsC ty)
-fromCScalarTensor t@(Tensor p _ ) = do
+fromCScalarTensor (Tensor p _ ) = do
   arr <- castPtr <$> C.data_ptr p
   _ <- peek arr
   r <- peek arr
@@ -974,3 +976,45 @@ debuggingPrintADGraph loss = do
           V.mapM_ (\e -> do
                       efn <- C.edge_function e
                       printADGraphLoop efn) es
+
+-- * Default types
+-- These are used by -fplugin Plugin.DefaultType
+-- Types are gussed in reverse order from the list here.
+
+instance DefaultType Nat 1024
+instance DefaultType Nat 512
+instance DefaultType Nat 256
+instance DefaultType Nat 128
+instance DefaultType Nat 64
+instance DefaultType Nat 32
+instance DefaultType Nat 16
+instance DefaultType Nat 13
+instance DefaultType Nat 12
+instance DefaultType Nat 11
+instance DefaultType Nat 10
+instance DefaultType Nat 9
+instance DefaultType Nat 8
+instance DefaultType Nat 7
+instance DefaultType Nat 6
+instance DefaultType Nat 5
+instance DefaultType Nat 4
+instance DefaultType Nat 3
+instance DefaultType Nat 2
+instance DefaultType Nat 1
+instance DefaultType Nat 0
+
+-- Prefer CUDA if available
+#if WITH_CUDA
+instance DefaultType TensorKind KCuda
+#endif
+instance DefaultType TensorKind KCpu
+
+instance DefaultType TensorType THalf
+instance DefaultType TensorType TBool
+instance DefaultType TensorType TByte
+instance DefaultType TensorType TChar
+instance DefaultType TensorType TShort
+instance DefaultType TensorType TLong
+instance DefaultType TensorType TDouble
+instance DefaultType TensorType TInt
+instance DefaultType TensorType TFloat

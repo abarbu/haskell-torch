@@ -2,6 +2,9 @@
 
 export WITH_JUPYTER=NO
 export WITH_CUDA=IF_PRESENT
+export CONDA_ENV=haskell-torch
+export QUICK_GHC=NO
+export FAST=
 
 while test $# -gt 0; do
   case "$1" in
@@ -17,6 +20,9 @@ while test $# -gt 0; do
       echo "--without-jupyter         don't install jupyter"
       echo "--with-cuda               install CUDA"
       echo "--without-cuda            don't install CUDA"
+      echo "--in-conda-base           install in base conda, not haskell-torch"
+      echo "--quick-ghc               fast ghc builds, but the compiler will be rather slow"
+      echo "--fast                    like stack --fast disables optimizations for app code"
       exit 0
       ;;
     --with-jupyter)
@@ -35,6 +41,18 @@ while test $# -gt 0; do
       export WITH_CUDA=NO
       shift
       ;;
+    --in-conda-base)
+      export CONDA_ENV=base
+      shift
+      ;;
+    --quick-ghc)
+      export QUICK_GHC=YES
+      shift
+      ;;
+    --fast)
+      export FAST=--fast
+      shift
+      ;;
     *)
       break
       ;;
@@ -45,6 +63,8 @@ echo "======================================================================"
 echo "Configuring with"
 echo " WITH_JUPYTER=$WITH_JUPYTER"
 echo " WITH_CUDA=$WITH_CUDA"
+echo " QUICK_GHC=$QUICK_GHC"
+echo " FAST=$FAST"
 echo "======================================================================"
 
 git submodule update --init
@@ -53,18 +73,18 @@ conda init bash
 
 eval "$(conda shell.bash hook)"
 
-if conda activate haskell-torch ; then
+if conda activate $CONDA_ENV ; then
     if [ $WITH_JUPYTER = "YES" ]; then
 	if [ $WITH_CUDA = "YES" ]; then
-            conda env update -n haskell-torch --file environment-with-jupyter.yml
+            conda env update -n $CONDA_ENV --file environment-with-jupyter.yml
 	else
-            conda env update -n haskell-torch --file environment-with-jupyter-cpu-only.yml
+            conda env update -n $CONDA_ENV --file environment-with-jupyter-cpu-only.yml
 	fi
     else
 	if [ $WITH_CUDA = "YES" ]; then
-            conda env update -n haskell-torch --file environment.yml
+            conda env update -n $CONDA_ENV --file environment.yml
 	else
-            conda env update -n haskell-torch --file environment-cpu-only.yml
+            conda env update -n $CONDA_ENV --file environment-cpu-only.yml
 	fi
     fi
 else
@@ -83,8 +103,8 @@ else
     fi
 fi
 
-if ! conda activate haskell-torch ; then
-    echo Cannot activate the haskell-torch environment >&2
+if ! conda activate $CONDA_ENV ; then
+    echo Cannot activate the $CONDA_ENV environment >&2
     exit 1
 fi
 
@@ -104,7 +124,7 @@ chmod a+x $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh
 
 # Needed to reload the environment
 conda deactivate
-conda activate haskell-torch
+conda activate $CONDA_ENV
 
 args=()
 
@@ -126,7 +146,7 @@ echo "======================================================================"
 echo "Building"
 echo "======================================================================"
 
-stack build haskell-torch --fast || { echo "Failed to build haskell-torch! :("; exit 1; }
+stack build haskell-torch $FAST || { echo "Failed to build haskell-torch! :("; exit 1; }
 
 echo "======================================================================"
 echo "We are now setting up jupyter / ihaskell"
@@ -134,7 +154,7 @@ echo "======================================================================"
 
 if [ $WITH_JUPYTER = "YES" ]; then
     patch --forward -p0 < ihaskell-dynamic.diff || { echo 'Failed to patch IHaskell' ; exit 1; }
-    stack install ihaskell --fast || { echo 'Failed to build IHaskell' ; exit 1; }
+    stack install ihaskell $FAST || { echo 'Failed to build IHaskell' ; exit 1; }
     stack exec -- ihaskell install --stack || { echo 'Failed to install IHaskell' ; exit 1; }
     jupyter labextension install jupyterlab-ihaskell
     # TODO This is an alternate extension, not sure
@@ -153,4 +173,4 @@ echo
 echo " Check above to see if you have CUDA support"
 echo " If you want to regenerate the bindings against a new PyTorch, run make"
 echo " Next up activate the conda environment. You can later build the code with:"
-echo "    conda activate haskell-torch && stack build"
+echo "    conda activate haskell-torch && stack build ${FAST}"
