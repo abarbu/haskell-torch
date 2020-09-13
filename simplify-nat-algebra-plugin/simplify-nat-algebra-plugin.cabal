@@ -1,0 +1,48 @@
+name:                simplify-nat-algebra-plugin
+version:             0.1
+synopsis:            Computer algebra to simplify long type-level Nat expressions
+description:         Opertions on datatypes with type-level dimensions often lead to very long expressions that can easily be simplified.
+homepage:            http://github.com/abarbu/haskell-torch/simplify-nat-algebra-plugin
+bug-reports:         http://github.com/abarbu/haskell-torch/simplify-nat-algebra-plugin
+license:             BSD2
+license-file:        LICENSE
+author:              Andrei Barbu
+maintainer:          andrei@0xab.com
+copyright:           Copyright © 2020 Andrei Barbu
+category:            Type System
+build-type:          Simple
+extra-source-files:  README.md
+                     CHANGELOG.md
+cabal-version:       >=1.10
+
+source-repository head
+  type: git
+  location: https://github.com/abarbu/haskell-torch/simplify-nat-algebra-plugin.git
+
+flag deverror
+  description:
+    Enables `-Werror` for development mode and TravisCI
+  default: False
+  manual: True
+
+library
+  exposed-modules:     Plugin.SimplifyNat
+  build-depends:       base >= 4.8,
+                       ghc  >= 8.10.2,
+                       containers
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+
+test-suite test-simplify-nat-algebra-plugin
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  build-depends:       base                      >= 4.8 && <5,
+                       simplify-nat-algebra-plugin,
+                       ghc-typelits-knownnat,
+                       tasty                     >= 0.10,
+                       tasty-hunit               >= 0.9,
+                       template-haskell          >= 2.11.0.0
+  hs-source-dirs:      tests
+  default-language:    Haskell2010
+  if flag(deverror)
+    ghc-options:       -O0 -dcore-lint
