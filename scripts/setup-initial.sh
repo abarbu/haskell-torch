@@ -59,22 +59,13 @@ while test $# -gt 0; do
   esac
 done
 
-bash scripts/setup-initial.sh "$@"
-bash scripts/setup-conda.sh "$@"
-bash scripts/setup-haskell.sh "$@"
-bash scripts/setup-jupyter.sh "$@"
-
 echo "======================================================================"
-echo "                  Haskell-Torch is set up!"
-echo ""
-echo "Configured with:"
+echo "Configuring with"
 echo " WITH_JUPYTER=$WITH_JUPYTER"
 echo " WITH_CUDA=$WITH_CUDA"
 echo " QUICK_GHC=$QUICK_GHC"
 echo " FAST=$FAST"
 echo "======================================================================"
-echo
-echo " Check above to see if you have CUDA support"
-echo " If you want to regenerate the bindings against a new PyTorch, run make"
-echo " Next up activate the conda environment. You can later build the code with:"
-echo "    conda activate haskell-torch && stack build ${FAST}"
+
+git submodule update --init
+python generate-config.py "${args[@]}" || { echo 'Failed to create configuration (stack.yaml and config.yaml) files' ; exit 1; }

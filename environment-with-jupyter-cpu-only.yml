@@ -30,3 +30,4 @@ dependencies:
   - jupyterlab
   - nb_conda_kernels
   - nodejs
+  - ncurses

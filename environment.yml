@@ -19,3 +19,4 @@ dependencies:
   - tensorflow
   - cudatoolkit=10.1
   - torchvision
+  - ncurses

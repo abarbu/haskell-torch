@@ -1,4 +1,4 @@
 :set -fobject-code
 :set -O0
 :set prompt-cont |
-:set prompt >>
+:set prompt > 
