@@ -73,6 +73,11 @@ data Backend = BackendCPU
              | BackendCUDA
              deriving (Show, Eq)
 
+data Layout = LayoutStrided
+            | LayoutSparse
+            | LayoutMlkdnn
+             deriving (Show, Eq)
+
 data ScalarType = ScalarTypeBool
                 | ScalarTypeByte
                 | ScalarTypeChar
@@ -115,6 +120,7 @@ data Reduction = ReductionNone
 data MemoryFormat = MemoryFormatContiguous
                   | MemoryFormatPreserve
                   | MemoryFormatChannelsLast
+                  | MemoryFormatChannelsLast3d
              deriving (Show, Eq)
 
 data AttributeKind = AttributeKindFloat

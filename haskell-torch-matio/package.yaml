@@ -18,10 +18,7 @@ description:         Please see the README on Github at <https://github.com/abar
 dependencies:
 - base >= 4.7 && < 5
 
-_config: !include "../config.yaml"
-
 library:
-  <<: *pytorchdefaults
   source-dirs: src
   extra-libraries:
     - matio

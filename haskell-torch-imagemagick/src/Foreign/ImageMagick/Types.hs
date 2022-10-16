@@ -12,7 +12,6 @@ import qualified Language.C.Inline.Context        as C
 import qualified Language.C.Types                 as C
 import qualified Language.Haskell.TH              as TH
 
-C.verbatim "#define MAGICKCORE_QUANTUM_DEPTH 16"
 C.include "<ImageMagick-7/MagickWand/MagickWand.h>"
 
 data CMagickWand

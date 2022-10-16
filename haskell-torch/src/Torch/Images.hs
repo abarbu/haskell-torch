@@ -199,7 +199,7 @@ normalizeGreyImageTensor :: forall ty ki szh szw.
                          -> Tensor ty ki '[1,szh,szw]
                          -> IO (Tensor ty ki '[1,szh,szw])
 normalizeGreyImageTensor (Tensor mean _) (Tensor std _) (Tensor t _) = do
-  t' <- C.clone__tm t (fromIntegral $ fromEnum  C.MemoryFormatPreserve)
+  t' <- C.clone__tm t Nothing
   s <- toCScalar @ty @ki 1
   C.sub_mts t' mean s
   C.div__mt t' std
@@ -318,7 +318,7 @@ makeGreyGrid :: forall (imagesPerRow :: Nat) (padding :: Nat) (ty :: TensorType)
             -> TensorTyToHs ty
             -> Tensor ty 'KCpu '[nr, 1, szh, szw]
             -> IO (Tensor ty 'KCpu '[1
-                                   ,padding + (GridRows imagesPerRow nr) TL.* (szh+padding)
+                                   ,padding + GridRows imagesPerRow nr TL.* (szh+padding)
                                    ,padding + imagesPerRow TL.* (padding+szw)])
 makeGreyGrid _ _ padValue images = do
   grid <- full padValue
@@ -350,7 +350,7 @@ makeRGBGrid :: forall (imagesPerRow :: Nat) (padding :: Nat) (ty :: TensorType) 
             -> TensorTyToHs ty
             -> Tensor ty 'KCpu '[nr, 3, szh, szw]
             -> IO (Tensor ty 'KCpu '[3
-                                   ,padding + (GridRows imagesPerRow nr) TL.* (szh+padding)
+                                   ,padding + GridRows imagesPerRow nr TL.* (szh+padding)
                                    ,padding + imagesPerRow TL.* (padding+szw)])
 makeRGBGrid _ _ padValue images = do
   grid <- full padValue

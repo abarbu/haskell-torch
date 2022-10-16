@@ -1,0 +1,55 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           haskell-torch-tools
+version:        0.1.0.0
+synopsis:       Support tools to generate code for haskell-torch
+description:    Please see the README on Github at <https://github.com/abarbu/haskell-torch#readme>
+category:       AI
+homepage:       https://github.com/abarbu/haskell-torch
+bug-reports:    https://github.com/abarbu/haskell-torch/issues
+author:         Andrei Barbu
+maintainer:     andrei@0xab.com
+copyright:      2018 Andrei Barbu
+license:        BSD3
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/abarbu/haskell-torch
+  subdir: haskell-torch-tools
+
+executable haskell-torch-tools-generate-ctensor
+  main-is: GenerateCTensor.hs
+  other-modules:
+      Types
+      Paths_haskell_torch_tools
+  hs-source-dirs:
+      app
+      src
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -main-is GenerateCTensor
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , directory
+    , docopt
+    , extra
+    , filepath
+    , inline-c
+    , inline-c-cpp
+    , lens
+    , lens-aeson
+    , stache
+    , template-haskell
+    , text
+    , unordered-containers
+    , vector
+    , yaml
+  default-language: Haskell2010

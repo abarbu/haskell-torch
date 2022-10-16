@@ -140,6 +140,14 @@ marshalRet = M.fromList
                           , _isOpaqueC = False
                           , _retHsFn = ""
                           , _finalizerHs = "" })
+  ,("size_t", MarshalRet { _castType = Nothing
+                          , _retTyHs = "CSize"
+                          , _retTyC = "size_t"
+                          , _needsAlloc = False
+                          , _constructorC = ""
+                          , _isOpaqueC = False
+                          , _retHsFn = ""
+                          , _finalizerHs = "" })
   ,("bool", MarshalRet { _castType = Nothing
                        , _retTyHs = "CBool"
                        , _retTyC = "bool"
@@ -172,6 +180,14 @@ marshalRet = M.fromList
                           , _isOpaqueC = False
                           , _retHsFn = ""
                           , _finalizerHs = "deleteTensor" })
+  ,("const Tensor&", MarshalRet { _castType = Nothing
+                                , _retTyHs = "ForeignPtr CTensor"
+                                , _retTyC = "Tensor*"
+                                , _needsAlloc = True
+                                , _constructorC = "Tensor"
+                                , _isOpaqueC = False
+                                , _retHsFn = ""
+                                , _finalizerHs = "deleteTensor" })
   ,("Tensor", MarshalRet { _castType = Nothing
                          , _retTyHs = "ForeignPtr CTensor"
                          , _retTyC = "Tensor*"
@@ -212,6 +228,14 @@ marshalRet = M.fromList
                                             , _isOpaqueC = True
                                             , _retHsFn = " >>= unTupleTensorTensor"
                                             , _finalizerHs = "finalizerFree" })
+  ,("std::tuple<Tensor &,Tensor &>", MarshalRet { _castType = Nothing
+                                                , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor)"
+                                                , _retTyC = "void*"
+                                                , _needsAlloc = True
+                                                , _constructorC = "std::tuple<Tensor,Tensor>"
+                                                , _isOpaqueC = True
+                                                , _retHsFn = " >>= unTupleTensorTensor"
+                                                , _finalizerHs = "finalizerFree" })
   ,("std::tuple<Tensor,Tensor,Tensor>", MarshalRet { _castType = Nothing
                                                    , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor)"
                                                    , _retTyC = "void*"
@@ -220,6 +244,14 @@ marshalRet = M.fromList
                                                    , _isOpaqueC = True
                                                    , _retHsFn = " >>= unTupleTensorTensorTensor"
                                                    , _finalizerHs = "finalizerFree" })
+  ,("std::tuple<Tensor &,Tensor &,Tensor &>", MarshalRet { _castType = Nothing
+                                                         , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor)"
+                                                         , _retTyC = "void*"
+                                                         , _needsAlloc = True
+                                                         , _constructorC = "std::tuple<Tensor,Tensor,Tensor>"
+                                                         , _isOpaqueC = True
+                                                         , _retHsFn = " >>= unTupleTensorTensorTensor"
+                                                         , _finalizerHs = "finalizerFree" })
   ,("std::tuple<Tensor,Tensor,Tensor,Tensor>", MarshalRet { _castType = Nothing
                                                           , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor, ForeignPtr CTensor)"
                                                           , _retTyC = "void*"
@@ -244,6 +276,14 @@ marshalRet = M.fromList
                                                            , _isOpaqueC = True
                                                            , _retHsFn = " >>= unTupleTensorTensorTensorInt64"
                                                            , _finalizerHs = "finalizerFree" })
+  ,("std::tuple<double,int64_t>", MarshalRet { _castType = Nothing
+                                             , _retTyHs = "(CDouble, Int64)"
+                                             , _retTyC = "void*"
+                                             , _needsAlloc = True
+                                             , _constructorC = "std::tuple<double,int64_t>"
+                                             , _isOpaqueC = True
+                                             , _retHsFn = " >>= unTupleDoubleInt64"
+                                             , _finalizerHs = "finalizerFree" })
   ,("std::tuple<Tensor,Tensor,double,int64_t>", MarshalRet { _castType = Nothing
                                                            , _retTyHs = "(ForeignPtr CTensor, ForeignPtr CTensor, CDouble, Int64)"
                                                            , _retTyC = "void*"
@@ -268,6 +308,14 @@ marshalRet = M.fromList
                                       , _isOpaqueC = True
                                       , _retHsFn = " >>= unVectorTensor"
                                       , _finalizerHs = "finalizerFree" })
+  ,("IntArrayRef", MarshalRet { _castType = Nothing
+                              , _retTyHs = "Vector Int64"
+                              , _retTyC = "void*"
+                              , _needsAlloc = True
+                              , _constructorC = "IntArrayRef"
+                              , _isOpaqueC = True
+                              , _retHsFn = " >>= unIntArrayRef"
+                              , _finalizerHs = "finalizerFree" })
   ,("QScheme", MarshalRet { _castType = Just "uint8_t"
                           , _retTyHs = "Word8"
                           , _retTyC = "uint8_t"
@@ -276,6 +324,14 @@ marshalRet = M.fromList
                           , _isOpaqueC = False
                           , _retHsFn = ""
                           , _finalizerHs = "" })
+  ,("std::string", MarshalRet { _castType = Nothing
+                              , _retTyHs = "Ptr CChar"
+                              , _retTyC = "char*"
+                              , _needsAlloc = False
+                              , _constructorC = ""
+                              , _isOpaqueC = False
+                              , _retHsFn = ""
+                              , _finalizerHs = "" })
   ,("ScalarType", MarshalRet { _castType = Just "int8_t"
                              , _retTyHs = "Int8"
                              , _retTyC = "int8_t"
@@ -284,6 +340,30 @@ marshalRet = M.fromList
                              , _isOpaqueC = False
                              , _retHsFn = ""
                              , _finalizerHs = "" })
+  ,("Layout", MarshalRet { _castType = Just "int8_t"
+                         , _retTyHs = "Int8"
+                         , _retTyC = "int8_t"
+                         , _needsAlloc = False
+                         , _constructorC = ""
+                         , _isOpaqueC = False
+                         , _retHsFn = ""
+                         , _finalizerHs = "" })
+  -- ,("Device", MarshalRet { _castType = Just "int"
+  --                        , _retTyHs = "CInt"
+  --                        , _retTyC = "int"
+  --                        , _needsAlloc = False
+  --                        , _constructorC = ""
+  --                        , _isOpaqueC = False
+  --                        , _retHsFn = ""
+  --                        , _finalizerHs = "" })
+  ,("TensorOptions", MarshalRet { _castType = Nothing
+                                , _retTyHs = "ForeignPtr CTensorOptions"
+                                , _retTyC = "TensorOptions*"
+                                , _needsAlloc = True
+                                , _constructorC = "TensorOptions"
+                                , _isOpaqueC = False
+                                , _retHsFn = ""
+                                , _finalizerHs = "deleteTensorOptions" })
   ]
   
 data MarshalArg = MarshalArg { _argTyHs :: Text        -- ^ Hs type when this is passed as an argument
@@ -299,21 +379,39 @@ marshalArg = M.fromList
                           , _dereferenceC = ""
                           , _argC = Nothing
                           , _argPreFn = Nothing })
+  ,("uint64_t", MarshalArg { _argTyHs = "Word64"
+                           , _argTyC = "uint64_t"
+                           , _dereferenceC = ""
+                           , _argC = Nothing
+                           , _argPreFn = Nothing })
+  ,("int", MarshalArg { _argTyHs = "CInt"
+                      , _argTyC = "int"
+                      , _dereferenceC = ""
+                      , _argC = Nothing
+                      , _argPreFn = Nothing })
+  ,("size_t", MarshalArg { _argTyHs = "CSize"
+                         , _argTyC = "size_t"
+                         , _dereferenceC = ""
+                         , _argC = Nothing
+                         , _argPreFn = Nothing })
   ,("c10::optional<int64_t>", MarshalArg { _argTyHs = "Maybe Int64"
                                          , _argTyC = "int64_t"
                                          , _dereferenceC = ""
-                                         , _argC = Just $ \n -> "($(bool " <> renameHs n <> "__is_present) ? make_optional($(int64_t " <> renameHs n <> "__value)) : c10::nullopt)"
-                                         , _argPreFn = Just $ \n -> "let ("<>n<>"__is_present, "<>n<>"__value) = splitMaybe "<>n<> " 0 in " })
+                                         , _argC = optionalArgC $ \rn -> "$(int64_t "<>rn<>")"
+                                           -- Just $ \n -> "($(bool " <> renameHs n <> "__is_present) ? make_optional($(int64_t " <> renameHs n <> "__value)) : c10::nullopt)"
+                                         , _argPreFn = optionalArgPreFun "0"
+                                           -- Just $ \n -> "let ("<>n<>"__is_present, "<>n<>"__value) = splitMaybe "<>n<> " 0 in "
+                                         })
   ,("bool", MarshalArg { _argTyHs = "CBool"
                        , _argTyC = "bool"
                        , _dereferenceC = ""
                        , _argC = Nothing
                        , _argPreFn = Nothing })
-  ,("c10::optional<bool>", MarshalArg { _argTyHs = "CBool"
+  ,("c10::optional<bool>", MarshalArg { _argTyHs = "Maybe CBool"
                                       , _argTyC = "bool"
                                       , _dereferenceC = ""
-                                      , _argC = Nothing
-                                      , _argPreFn = Nothing })
+                                      , _argC = optionalArgC $ \rn->"$(bool "<>rn<>")"
+                                      , _argPreFn = optionalArgPreFun "0" })
   ,("double", MarshalArg { _argTyHs = "CDouble"
                          , _argTyC = "double"
                          , _dereferenceC = ""
@@ -322,8 +420,11 @@ marshalArg = M.fromList
   ,("c10::optional<double>", MarshalArg { _argTyHs = "Maybe CDouble"
                                         , _argTyC = "double"
                                         , _dereferenceC = ""
-                                        , _argC = Just $ \n -> "($(bool " <> renameHs n <> "__is_present) ? make_optional($(double " <> renameHs n <> "__value)) : c10::nullopt)"
-                                        , _argPreFn = Just $ \n -> "let ("<>n<>"__is_present, "<>n<>"__value) = splitMaybe "<>n<> " 0 in " })
+                                        , _argC = optionalArgC $ \rn->"$(double "<>rn<>")"
+                                          -- Just $ \n -> "($(bool " <> renameHs n <> "__is_present) ? make_optional($(double " <> renameHs n <> "__value)) : c10::nullopt)"
+                                        , _argPreFn = optionalArgPreFun "0"
+                                          -- Just $ \n -> "let ("<>n<>"__is_present, "<>n<>"__value) = splitMaybe "<>n<> " 0 in "
+                                        })
   ,("Tensor &", MarshalArg { _argTyHs = "ForeignPtr CTensor"
                            , _argTyC = "Tensor*"
                            , _dereferenceC = "*"
@@ -334,6 +435,16 @@ marshalArg = M.fromList
                                  , _dereferenceC = "*"
                                  , _argC = Just $ \n -> "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
                                  , _argPreFn = Nothing })
+  ,("const Tensor&", MarshalArg { _argTyHs = "ForeignPtr CTensor"
+                                , _argTyC = "Tensor*"
+                                , _dereferenceC = "*"
+                                , _argC = Just $ \n -> "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
+                                , _argPreFn = Nothing })
+  ,("const at::Tensor&", MarshalArg { _argTyHs = "ForeignPtr CTensor"
+                                    , _argTyC = "Tensor*"
+                                    , _dereferenceC = "*"
+                                    , _argC = Just $ \n -> "*$fptr-ptr:(Tensor* " <> renameHs n <> ")"
+                                    , _argPreFn = Nothing })
   ,("Tensor", MarshalArg { _argTyHs = "ForeignPtr CTensor"
                          , _argTyC = "Tensor*"
                          , _dereferenceC = "*"
@@ -344,41 +455,60 @@ marshalArg = M.fromList
                            , _dereferenceC = ""
                            , _argC = Just $ \n -> "$fptr-ptr:(Tensor* " <> renameHs n <> ")"
                            , _argPreFn = Nothing  })
+  ,("const c10::optional<Tensor> &", MarshalArg { _argTyHs = "Maybe (ForeignPtr CTensor)"
+                                                , _argTyC = "Tensor*"
+                                                , _dereferenceC = "*"
+                                                , _argC = optionalArgC $ \rn -> "*$fptr-ptr:(Tensor* " <> rn <> ")"
+                                                  -- Just $ \n -> "$fptr-ptr:(Tensor* " <> renameHs n <> ")"
+                                                , _argPreFn = optionalArgPreFun "nullForeignPtr"
+                                                  -- Nothing
+                                                })
   ,("const TensorOptions &", MarshalArg { _argTyHs = "ForeignPtr CTensorOptions"
                                         , _argTyC = "TensorOptions*"
                                         , _dereferenceC = "*"
                                         , _argC = Just $ \n -> "*$fptr-ptr:(TensorOptions* " <> renameHs n <> ")"
                                         , _argPreFn = Nothing })
+  ,("TensorOptions", MarshalArg { _argTyHs = "ForeignPtr CTensorOptions"
+                                , _argTyC = "TensorOptions*"
+                                , _dereferenceC = "*"
+                                , _argC = Just $ \n -> "*$fptr-ptr:(TensorOptions* " <> renameHs n <> ")"
+                                , _argPreFn = Nothing })
   ,("Scalar", MarshalArg { _argTyHs = "ForeignPtr CScalar"
                          , _argTyC = "Scalar*"
                          , _dereferenceC = "*"
                          , _argC = Just $ \n -> "*$fptr-ptr:(Scalar* " <> renameHs n <> ")"
                          , _argPreFn = Nothing })
-  ,("c10::optional<Scalar>", MarshalArg { _argTyHs = "ForeignPtr CScalar"
+  ,("c10::optional<Scalar>", MarshalArg { _argTyHs = "Maybe (ForeignPtr CScalar)"
                                         , _argTyC = "Scalar*"
                                         , _dereferenceC = "*"
-                                        , _argC = Just $ \n -> "*$fptr-ptr:(Scalar* " <> renameHs n <> ")"
-                                        , _argPreFn = Nothing })
+                                        , _argC = optionalArgC $ \rn -> "*$fptr-ptr:(Scalar* " <> rn <> ")"
+                                        , _argPreFn = optionalArgPreFun "nullForeignPtr"
+                                        })
   ,("ScalarType", MarshalArg { _argTyHs = "Int8"
                              , _argTyC = "int8_t"
                              , _dereferenceC = ""
                              , _argC = Just $ \n -> "static_cast<ScalarType>($(int8_t " <> renameHs n <> "))"
                              , _argPreFn = Nothing })
-  ,("c10::optional<ScalarType>", MarshalArg { _argTyHs = "Int8"
+  ,("c10::optional<ScalarType>", MarshalArg { _argTyHs = "Maybe Int8"
                                             , _argTyC = "int8_t"
                                             , _dereferenceC = ""
-                                            , _argC = Just $ \n -> "static_cast<ScalarType>($(int8_t " <> renameHs n <> "))"
-                                            , _argPreFn = Nothing })
+                                            , _argC = optionalArgC $ \rn -> "static_cast<ScalarType>($(int8_t " <> rn <> "))"
+                                            , _argPreFn = optionalArgPreFun "0" })
   ,("MemoryFormat", MarshalArg { _argTyHs = "Int8"
                                , _argTyC = "int8_t"
                                , _dereferenceC = ""
                                , _argC = Just $ \n -> "static_cast<MemoryFormat>($(int8_t " <> renameHs n <> "))"
                                , _argPreFn = Nothing })
-  ,("c10::optional<MemoryFormat>", MarshalArg { _argTyHs = "Int8"
+  ,("at::MemoryFormat", MarshalArg { _argTyHs = "Int8"
+                                   , _argTyC = "int8_t"
+                                   , _dereferenceC = ""
+                                   , _argC = Just $ \n -> "static_cast<MemoryFormat>($(int8_t " <> renameHs n <> "))"
+                                   , _argPreFn = Nothing })
+  ,("c10::optional<MemoryFormat>", MarshalArg { _argTyHs = "Maybe Int8"
                                               , _argTyC = "int8_t"
                                               , _dereferenceC = ""
-                                              , _argC = Just $ \n -> "static_cast<MemoryFormat>($(int8_t " <> renameHs n <> "))"
-                                              , _argPreFn = Nothing })
+                                              , _argC = optionalArgC $ \rn -> "static_cast<MemoryFormat>($(int8_t " <> rn <> "))"
+                                              , _argPreFn = optionalArgPreFun "0" })
   ,("std::array<bool,2>", MarshalArg { _argTyHs = "Vector CBool"
                                      , _argTyC = "std::array<bool,2>"
                                      , _dereferenceC = ""
@@ -399,21 +529,59 @@ marshalArg = M.fromList
                               , _dereferenceC = ""
                               , _argC = Just $ \n -> "ArrayRef<int64_t>($(int64_t* " <> renameHs n <> "__array), $(size_t "<> n <>"__size))"
                               , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "})
+  ,("c10::optional<IntArrayRef>", MarshalArg { _argTyHs = "Maybe (Vector Int64)"
+                                             , _argTyC = "IntArrayRef"
+                                             , _dereferenceC = ""
+                                             , _argC = optionalArgC $ \rn -> "ArrayRef<int64_t>($(int64_t* " <> rn <> "__array), $(size_t "<> rn <>"__size))"
+                                             , _argPreFn =
+                                               optionalArgPreFun' "V.empty" $ \n ->
+                                                 "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "})
+  ,("ArrayRef<double>", MarshalArg { _argTyHs = "Vector CDouble"
+                                   , _argTyC = "ArrayRef<double>"
+                                   , _dereferenceC = ""
+                                   , _argC = Just $ \n -> "ArrayRef<double>($(double* " <> renameHs n <> "__array), $(size_t "<> n <>"__size))"
+                                   , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "})
+  ,("c10::optional<ArrayRef<double>>", MarshalArg { _argTyHs = "Maybe (Vector CDouble)"
+                                                  , _argTyC = "ArrayRef<double>"
+                                                  , _dereferenceC = ""
+                                                  , _argC = optionalArgC $ \rn -> "ArrayRef<double>($(double* " <> rn <> "__array), $(size_t "<> rn <>"__size))"
+                                                  , _argPreFn = optionalArgPreFun' "V.empty" $ \n ->
+                                                      "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in "})
   ,("TensorList", MarshalArg { _argTyHs = "Vector (Ptr CTensor)"
                              , _argTyC = "TensorList"
                              , _dereferenceC = ""
                              , _argC = Just $ \n -> "pack_tensor_list($(Tensor** " <> renameHs n <> "__array), $(size_t "<> n <>"__size))"
+                             , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in " })
+  ,("c10::optional<TensorList>", MarshalArg { _argTyHs = "Vector (Ptr CTensor)"
+                             , _argTyC = "TensorList"
+                             , _dereferenceC = ""
+                             , _argC = Just $ \n -> "pack_tensor_list($(Tensor** " <> renameHs n <> "__array), $(size_t "<> n <>"__size))"
+                             , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in " })
+  ,("const c10::List<c10::optional<Tensor>> &", MarshalArg { _argTyHs = "Vector (Ptr CTensor)"
+                             , _argTyC = "c10::List<c10::optional<Tensor>>"
+                             , _dereferenceC = ""
+                             , _argC = Just $ \n -> "pack_tensor_optional_list($(Tensor** " <> renameHs n <> "__array), $(size_t "<> n <>"__size))"
                              , _argPreFn = Just $ \n -> "V.unsafeWith "<>n<>" $ \\"<>n<>"__array -> let "<> n <>"__size = fromIntegral (V.length "<> n <>") in " })
   ,("Generator *", MarshalArg { _argTyHs = "Ptr CGenerator"
                               , _argTyC = "Generator*"
                               , _dereferenceC = ""
                               , _argC = Nothing
                               , _argPreFn = Nothing })
+  ,("c10::optional<Generator>", MarshalArg { _argTyHs = "Maybe (Ptr CGenerator)"
+                                           , _argTyC = "Generator*"
+                                           , _dereferenceC = ""
+                                           , _argC = optionalArgC $ \rn -> "*$(Generator* " <> rn <> ")"
+                                           , _argPreFn = optionalArgPreFun "nullPtr" })
   ,("std::string", MarshalArg { _argTyHs = "Ptr CChar"
                               , _argTyC = "char*"
                               , _dereferenceC = ""
                               , _argC = Nothing
                               , _argPreFn = Nothing })
+  ,("c10::optional<std::string>", MarshalArg { _argTyHs = "Ptr CChar"
+                                             , _argTyC = "char*"
+                                             , _dereferenceC = ""
+                                             , _argC = Nothing
+                                             , _argPreFn = Nothing })
   ,("Storage &", MarshalArg { _argTyHs = "Ptr CStorage"
                             , _argTyC = "Storage*"
                             , _dereferenceC = "*"
@@ -424,12 +592,35 @@ marshalArg = M.fromList
                           , _dereferenceC = "*"
                           , _argC = Nothing
                           , _argPreFn = Nothing })
+  ,("Backend", MarshalArg { _argTyHs = "Int32"
+                          , _argTyC = "int32_t"
+                          , _dereferenceC = "(Backend)"
+                          , _argC = Nothing
+                          , _argPreFn = Nothing })
   ,("Device", MarshalArg { _argTyHs = "Ptr CDevice"
                          , _argTyC = "Device*"
                          , _dereferenceC = "*"
                          , _argC = Nothing
                          , _argPreFn = Nothing })
+  ,("c10::optional<Device>", MarshalArg { _argTyHs = "Ptr CDevice"
+                                        , _argTyC = "Device*"
+                                        , _dereferenceC = "*"
+                                        , _argC = Nothing
+                                        , _argPreFn = Nothing })
+  ,("Layout", MarshalArg { _argTyHs = "Int8"
+                         , _argTyC = "(Layout)"
+                         , _dereferenceC = ""
+                         , _argC = Nothing
+                         , _argPreFn = Nothing })
+  ,("c10::optional<Layout>", MarshalArg { _argTyHs = "Maybe Int8"
+                                        , _argTyC = "(Layout)"
+                                        , _dereferenceC = ""
+                                        , _argC = optionalArgC $ \rn -> "((Layout)$(int8_t "<>rn<>"))"
+                                        , _argPreFn = optionalArgPreFun "0" })
   ]
+  where optionalArgC argCFn = Just $ \n -> "($(bool " <> renameHs n <> "__is_present) ? make_optional("<> argCFn (renameHs n <> "__value") <>") : c10::nullopt)"
+        optionalArgPreFun def = optionalArgPreFun' def (const "")
+        optionalArgPreFun' def fn = Just $ \n -> "let ("<>renameHs n<>"__is_present, "<>renameHs n<>"__value) = splitMaybe "<>renameHs n<> " "<>def<>" in " <> fn (renameHs n<> "__value")
 
 marshal from field err ty = case M.lookup ty from of
                               Nothing -> error (err ++ " doesn't know what to do with type " ++ show ty)
@@ -514,32 +705,50 @@ mangleNameByType name tys member =
                                                                        Nothing -> error $ "Can't mangle " ++ show ty
                                                                        Just t -> t) tys)
   where table = M.fromList [("int64_t", "6")
+                           ,("uint64_t", "6")
                            ,("c10::optional<int64_t>", "6")
+                           ,("int", "3")
                            ,("bool", "b")
                            ,("c10::optional<bool>", "b")
                            ,("double", "d")
                            ,("c10::optional<double>", "d")
                            ,("Tensor &", "t")
                            ,("const Tensor &", "t")
+                           ,("const Tensor&", "t")
+                           ,("const at::Tensor&", "t")
                            ,("Tensor", "t")
                            ,("Tensor *", "t")
+                           ,("const c10::optional<Tensor> &", "t")
+                           ,("const c10::List<c10::optional<Tensor>> &", "t")
                            ,("const TensorOptions &", "o")
+                           ,("TensorOptions", "o")
                            ,("Scalar", "s")
                            ,("c10::optional<Scalar>", "s")
                            ,("ScalarType", "S")
                            ,("c10::optional<ScalarType>", "S")
                            ,("MemoryFormat", "M")
+                           ,("at::MemoryFormat", "M")
                            ,("c10::optional<MemoryFormat>", "M")
                            ,("std::array<bool,2>", "a")
                            ,("std::array<bool,3>", "a")
                            ,("std::array<bool,4>", "a")
                            ,("IntArrayRef", "a")
+                           ,("c10::optional<IntArrayRef>", "a")
+                           ,("ArrayRef<double>", "a")
+                           ,("c10::optional<ArrayRef<double>>", "a")
                            ,("TensorList", "l")
+                           ,("c10::optional<TensorList>", "l")
                            ,("Generator *", "g")
+                           ,("c10::optional<Generator>", "g")
                            ,("std::string", "s")
+                           ,("c10::optional<std::string>", "s")
                            ,("Storage &", "S")
                            ,("Storage", "S")
-                           ,("Device", "d")]
+                           ,("Device", "D")
+                           ,("c10::optional<Device>", "D")
+                           ,("Layout", "l")
+                           ,("c10::optional<Layout>", "l")
+                           ,("Backend", "b")]
 
 generateFromFile :: Text -> Text -> Maybe Text -> ([Text] -> [Text]) -> Bool -> Bool -> IO [Text]
 generateFromFile filename start end cleanup member verbose = do
@@ -566,7 +775,7 @@ generateFromFile filename start end cleanup member verbose = do
                   Just end' -> fst $ T.breakOn end' x)
         $ snd
         $ T.breakOn start fin
-  mapM_ print os
+  when verbose $ mapM_ print os
   let ls = snd $ mapAccumL (\m (ty, nameC, nameHs, args, member) ->
                               (M.alter (\x -> Just $ case x of
                                            Nothing -> 1
@@ -589,101 +798,41 @@ generateFromFile filename start end cleanup member verbose = do
 
 generateFunctions :: Text -> Bool -> IO [Text]
 generateFunctions filename verbose = do
-  generateFromFile filename "static inline Tensor _cast_Byte(" Nothing
-    (filter (T.isInfixOf "{")
-      . map (T.replace "static inline " "")
-      . filter (T.isInfixOf "static inline "))
+  generateFromFile filename "TORCH_API Tensor _cast_Byte(" Nothing
+    (-- filter (T.isInfixOf "{")
+     --  . 
+     map (T.replace "TORCH_API " "")
+      . filter (T.isInfixOf "TORCH_API "))
     False
     verbose
 
 generateTensorBody :: Text -> Bool -> IO [Text]
 generateTensorBody filename verbose = do
-  generateFromFile filename "  void backward(" (Just "// We changed .dtype")
+  -- generateFromFile filename "  void backward(" (Just "// We changed .dtype")
+  generateFromFile filename "  int64_t dim() const" (Just "// We changed .dtype")
     (map (T.replace ") const" ")")
-      . filter (T.isInfixOf ") const"))
+      . filter (T.isInfixOf ") const")
+      . filter (not . T.isInfixOf "is_variable") -- This will generate a deprecation warning
+      . filter (not . T.isInfixOf "TensorImpl")
+      . filter (not . T.isInfixOf "channels_last_strides_exact_match")
+      . filter (not . T.isInfixOf "DeprecatedTypeProperties")
+      . filter (not . T.isInfixOf "KeySet")
+      . filter (not . T.isInfixOf "Storage")
+      . filter (not . T.isInfixOf "TypeMeta")
+      . filter (not . T.isInfixOf "QuantizerPtr")
+      . filter (not . T.isInfixOf "TensorAccessor")
+      . filter (not . T.isInfixOf "(Stream ")
+      . filter (not . T.isInfixOf "  T ")
+      . filter (not . T.isInfixOf "Device device() const")
+      . filter (not . T.isInfixOf "toString()") -- TODO long term
+      . filter (not . T.isInfixOf "operator") -- TODO long term
+      . filter (not . T.isInfixOf "NamedTensorMeta") -- TODO
+      -- . filter (not . T.isInfixOf "c10::List<c10::optional") -- TODO
+      . filter (not . T.isInfixOf "std::initializer_list<at::indexing::TensorIndex>") -- TODO
+      . filter (not . T.isInfixOf "ArrayRef<at::indexing::TensorIndex>") -- TODO short term
+      . filter (not . T.isInfixOf "//"))
     True
     verbose
-
--- generateFunctions :: Text -> Bool -> IO [Text]
--- generateFunctions filename verbose = do
---   let os =
---         filter (\(ty, name, args) -> (not (T.isInfixOf "_forward" name)) && (not (T.isInfixOf "_backward" name)))
---         $ map (\x ->
---          case T.splitOn "(" x of
---            [pre,args'] ->
---              let args = case T.splitOn ", " $ fst $ T.breakOn ")" args' of
---                           [""] -> []
---                           x    -> map (T.takeWhile (/= '=')) x
---                  (ty, name) = splitTyAndName pre
---              in (ty, name, args))
---         $ filter (not . T.isInfixOf "ConstQuantizerPtr") -- NB We don't yet support quantization
---         $ filter (not . T.isInfixOf "Dimname") -- NB We don't support named dimensions
---         $ filter (T.isInfixOf "{")
---         $ map (T.replace "static inline " "")
---         $ filter (T.isInfixOf "static inline ")
---         $ T.lines
---         $ snd
---         $ T.breakOn "static inline Tensor _cast_Byte(" fin
---   mapM_ print os
---   let ls = snd $ mapAccumL (\m (ty, name, args) ->
---                               (M.alter (\x -> Just $ case x of
---                                            Nothing -> 1
---                                            Just n  -> n + 1)
---                                 name
---                                 m
---                               ,emit False False ty name
---                                 (case M.lookup name m of
---                                     Nothing -> name
---                                     Just n  -> name <> "__" <> T.pack (show n))
---                                 (map splitTyAndName args)))
---                 M.empty os
---   when verbose $ mapM_ T.putStrLn ls
---   pure ls
-
--- generateTensorBody :: Text -> Bool -> IO [Text]
--- generateTensorBody filename verbose = do
---   let os =
---         filter (\(ty, name, args, member) -> (not (T.isInfixOf "_forward" name)) && (not (T.isInfixOf "_backward" name)))
---         $ map (\x ->
---          case T.splitOn "(" x of
---            [pre,args'] ->
---              let args = case T.splitOn ", " $ fst $ T.breakOn ")" args' of
---                           [""] -> []
---                           x    -> map (T.takeWhile (/= '=')) x
---                  (ty, name) = splitTyAndName pre
---              in (ty, name, args, True)
---            _ -> error $ "Failed to split function: " ++ show x
---               )
---         $ filter (not . T.isInfixOf "ConstQuantizerPtr") -- NB We don't yet support quantization
---         $ filter (not . T.isInfixOf "Dimname") -- NB We don't support named dimensions
---         $ filter (\x -> T.isInfixOf "{" x || T.isInfixOf ";" x)
---         $ map (T.replace ") const" ")")
---         $ filter (T.isInfixOf ") const")
---         $ T.lines
---         $ fst
---         $ T.breakOn "// We changed .dtype"
---         $ snd
---         $ T.breakOn "  void backward(" fin
---   mapM_ print os
---   let ls = snd $ mapAccumL (\m (ty, nameC, nameHs, args, member) ->
---                               (M.alter (\x -> Just $ case x of
---                                            Nothing -> 1
---                                            Just n  -> n + 1)
---                                 nameC
---                                 m
---                               ,emit False member ty nameC
---                                 (case M.lookup nameHs m of
---                                     Nothing -> nameHs
---                                     Just n  -> nameHs <> "__" <> T.pack (show n))
---                                 args))
---                 M.empty $ map (\(ty, nameC, args, member) ->
---                              (ty
---                              , nameC
---                              , mangleNameByType nameC (map (fst . splitTyAndName) args) member
---                              , map splitTyAndName args
---                              , member)) os
---   when verbose $ mapM_ T.putStrLn ls
---   pure ls
 
 main :: IO ()
 main = do

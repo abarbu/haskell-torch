@@ -988,6 +988,8 @@ instance DefaultType Nat 128
 instance DefaultType Nat 64
 instance DefaultType Nat 32
 instance DefaultType Nat 16
+instance DefaultType Nat 15
+instance DefaultType Nat 14
 instance DefaultType Nat 13
 instance DefaultType Nat 12
 instance DefaultType Nat 11
@@ -1009,12 +1011,12 @@ instance DefaultType TensorKind KCuda
 #endif
 instance DefaultType TensorKind KCpu
 
-instance DefaultType TensorType THalf
+instance DefaultType TensorType TInt
+instance DefaultType TensorType TLong
+instance DefaultType TensorType TDouble
+instance DefaultType TensorType TFloat
 instance DefaultType TensorType TBool
 instance DefaultType TensorType TByte
 instance DefaultType TensorType TChar
 instance DefaultType TensorType TShort
-instance DefaultType TensorType TLong
-instance DefaultType TensorType TDouble
-instance DefaultType TensorType TInt
-instance DefaultType TensorType TFloat
+instance DefaultType TensorType THalf

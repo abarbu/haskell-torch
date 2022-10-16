@@ -18,15 +18,15 @@ seed :: Ptr CGenerator -> IO Word64
 seed g = [C.exp|uint64_t { $(Generator *g)->seed() }|]
 
 initialSeed :: IO Word64
-initialSeed = [C.exp|uint64_t { at::detail::getDefaultCPUGenerator()->current_seed() }|]
+initialSeed = [C.exp|uint64_t { at::detail::getDefaultCPUGenerator().current_seed() }|]
 
 setSeed :: Ptr CGenerator -> Word64 -> IO ()
 setSeed g s = [C.exp|void { $(Generator *g)->set_current_seed($(uint64_t s)) }|]
 
 cpuGenerator :: IO (Ptr CGenerator)
-cpuGenerator = [C.exp|Generator *{ &at::globalContext().defaultGenerator(kCPU) }|]
+cpuGenerator = [C.exp|const Generator *{ &at::globalContext().defaultGenerator(kCPU) }|]
 
 #if WITH_CUDA
 cudaGenerator :: IO (Ptr CGenerator)
-cudaGenerator = [C.exp|Generator *{ &at::globalContext().defaultGenerator(kCUDA) }|]
+cudaGenerator = [C.exp|const Generator *{ &at::globalContext().defaultGenerator(kCUDA) }|]
 #endif

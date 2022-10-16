@@ -22,7 +22,7 @@ import qualified Torch.C.Variable     as C
 import           Torch.Tensor
 import           Torch.Types
 import           Foreign.ForeignPtr.Unsafe
-
+import           Torch.Misc
 
 data TraceValue = TraceValueTensor { tvTensorName       :: T.Text
                                    , tvTensorSizes      :: Vector Int64
@@ -194,15 +194,7 @@ summarizeTrace trace = do
 showTraceGraph :: TracePtr -> Bool -> IO ()
 showTraceGraph tptr noConstants = do
   trace <- parseTrace tptr
-  let filename = "/tmp/a.dot"
-  let outfilename = "/tmp/a.png"
-  T.writeFile (T.unpack filename) (traceToDot trace noConstants)
-  c <- S.shelly $ S.verbosely $ do
-    S.run_ "dot" [filename,"-Tpng","-o",outfilename]
-    S.lastExitCode
-  c <- S.shelly $ S.verbosely $ do
-    S.run_ "feh" [outfilename]
-    S.lastExitCode
+  displayDot (traceToDot trace noConstants)
   pure ()
 
 data TraceGraphState = TGS { tgsStr     :: Text

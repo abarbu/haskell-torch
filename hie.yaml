@@ -10,3 +10,5 @@ cradle:
       component: "default-type-plugin:lib"
     - path: "./simplify-nat-algebra-plugin"
       component: "simplify-nat-algebra-plugin:lib"
+    - path: "./haskell-notebook-filter"
+      component: "haskell-notebook-filter:exe:haskell-filter-jupyter"

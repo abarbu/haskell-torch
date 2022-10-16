@@ -4,16 +4,21 @@
 
 ## Haskell-Torch
 
-*If you've manged to find this package, you should ignore it for now. We'll have an official release in a week or two!*
+Still a work in progress. Stay tuned for updates.
 
-Practical deep learning in Haskell built on the same C++ foundations as
-PyTorch. Same speed, more safety, comprehensive, lots of pretrained models, and
-it works today. [Check out examples of how to build typesafe CNNs like AlexNet
-and ResNet and language models based on stacked LSTMs, along with GANs and
-VAEs. You'll see how to efficiently stream data to them from datasets like
-MNIST, load pretrained models from PyTorch, transfer weights back to PyTorch,
-use Tensorboard, and everything else you need to write deep learning code in
+Practical deep learning in Haskell built on the same C++ foundations as PyTorch
+with an extensive ecosystem. We've got Tensorboard support, efficient image
+manipulation support with imagemagick, HDF5 and Mat file support, and
+reinforcement learning with the OpenAI Gym (with Box2D and MuJoCo). Same speed,
+more safety, comprehensive, lots of pretrained models, and it works
+today. [Check out examples of how to build typesafe CNNs like AlexNet and ResNet
+and language models based on stacked LSTMs, along with GANs and VAEs. You'll see
+how to efficiently stream data to them from datasets like MNIST, load pretrained
+models from PyTorch, transfer weights back to PyTorch, use Tensorboard, and
+everything else you need to write deep learning code in
 Haskell.](https://github.com/abarbu/haskell-torch/tree/master/haskell-torch/src/Torch/Tutorial)
+
+*Unfortunately, Haskell suffers from major issues and limitations that basically make it useless as a language for machine learning or game development. We need your help GHC devs! See below*
 
 ### Why?
 
@@ -298,82 +303,3 @@ like that of the former. `Tensor.like a b` returns b and makes sure its type is
 the same as a. Second, you can annotate tensors with properties like size, see
 `Tensor.sized`, `Tensor.typed`, `Tensor.stored`, and similar functions.
 
-* Why install with Conda instead of doing everything manually or using nix?
-
-Conda is the standard way to install PyTorch and related libraries, if we don't
-go down that route, we lose the ability to interoperate with the rest of the
-ecosystem. The goal of Haskell-Torch isn't to replace everything in the distant
-future, but to try to be practical today. It's not the Haskell way of managing
-packages, but that's a small price to pay.
-
-### What we critically need from Haskell and GHC
-
-Haskell has five major issues that stop ML code in its tracks. Haskell-Torch is
-carefully designed to avoid some of these but part of the reason we're releasing
-this library is as a request/plea for developers to look into these issues. The
-initial version of Haskell-Torch had a lot more type safety, but we had to strip
-pretty much all of that out to make the library usable. We could do so much more
-in terms of type safety with these changes, they would help many projects, and
-Haskell could be a truly great language for ML. 
-
-GHC devs, please help!
-
-1. *gc* The only reason this library is being released after being private for
-   several years is because of the new low-latency GC that is coming soon. The
-   current GC is totally inadequate for ML. Haskell finalizers have to run
-   regularly to clean up huge amounts of data sitting on the C++ heap. In
-   addition to the new GC we need to have support for collecting garbage in the
-   Haskell heap more often and informing the GC of off-heap memory. The GC has
-   no hope of being useful if it doesn't know that a trivial haskell pointer is
-   actually backed by a 10gb tensor so it really needs to pay attention to it.
-2. *ambiguity* Haskell relies on a crutch for even simple code that involves
-   numbers like `print 1`. The type defaulting mechanism provides `1` with an
-   Integer type. This problem of intermediate results with totally safe and sane
-   defaults is pervasive throughout numerical computing and ML. We need access
-   to the type defaulting mechanism in type plugins, perhaps by giving all
-   plugins final notice that a wanted will be ambiguous.
-3. *errors* The errors in haskell are terrible unreadable monsters particularly
-   with the complex types in libraries like this. I have gotten 500 line errors
-   from Haskell-Torch in the past. We need to have something like error plugins
-   that can post-process errors to make them readable for humans. Individual
-   libraries understand the errors that they will produce far better than any
-   general-purpose code ever could. We really want to say "the 2nd argument of
-   this tensor should be divisible by 2". The same thing happens for other
-   libraries with a lot of polymorphism, for example lens, and we could all do
-   much better. Also, newcomers to haskell simply can't understand ghc's errors.
-4. *non-recursive bindings*. Haskell `let` is equivalent to Scheme's
-   `letrec`. This means that you can't write code like: `out <- fn1 out; out <- fn2 out`. 
-   You need to uniquely name each of these values. Long chains like
-   this are common in ML code and the intermediate values have no useful
-   names. You would be surprised by how much pain this adds to the language and
-   how error prone writing code is because. This is the #1 source of runtime
-   bugs in Haskell-Torch and the resulting bug is extremely nasty to find: you
-   just sit in an infinite loop. We need a flag to make let bindings act like
-   Scheme's `let` not `letrec`. I know that to many this will seem
-   like a minor concern, but it is not. A lot of ML code is ported from
-   different sources that are originally written in this style. This issue takes
-   something that would be a trivial 5 minute port and turns out into a
-   nightmare of debugging and infinite loops.
-5. *plugin and extension export*. We need to export what plugins and extension
-   are required to work with our code. This library requires a lot of extensions
-   and a lot of plugins! The problem is not with end users having a template
-   that they copy and paste into their code, or the fact that this is verbose,
-   it's more fundamental. We will have to change the extensions and plugins that
-   we use over time. That will require every user to change their code in a way
-   that is totally unpredictable and impossible to diagnose from the error
-   messages. Without the ability to export plugins or extensions we are doomed
-   to either constantly break user code in a really nasty way or we are locked
-   in to our early choices forever.
-
-Some minor usability requests, although one can live without these:
-
- 6. We need qualified exports to keep the library in some decent shape. Not
-    having them is a pain and a usability nightmare for large heterogenous
-    libraries like this. ML libraries have to do all sorts of random things from
-    loading images, to writing tensors, to dealing with memory concerns. Having all
-    of them in the same flat namespace is a mess and asking users to copy and
-    paste an import block is not practical. Users can't be asked to constantly
-    update that import block as the shape of the library changes.
- 7. Type argument support. We need to be able to annotate which type parameters
-    are actually meant to be arguments in Haddock. Documentation is far too hard
-    to read without this.

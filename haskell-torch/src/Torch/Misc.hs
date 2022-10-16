@@ -15,6 +15,7 @@ import           Data.Singletons.Prelude   as SP hiding (Seq)
 import           Data.String
 import           Data.Text                 (Text)
 import qualified Data.Text                 as T
+import qualified Data.Text.IO              as T
 import qualified Data.Vector.Storable      as V
 import           Foreign.C.Types
 import           Foreign.ForeignPtr
@@ -28,6 +29,73 @@ import qualified System.Directory          as P
 import qualified System.FilePath           as P
 import           System.Random             (randomRIO)
 import           Text.Printf               (printf)
+import           Data.Dynamic
+import           Data.Maybe
+import           System.IO.Unsafe
+import qualified Graphics.Matplotlib       as M
+import qualified Shelly                    as S
+import           System.IO.Temp
+
+-- * Show 
+
+data DisplayByType = DisplayByType { displayText_ :: Text -> IO ()
+                                   , displaySvg_ :: Text -> IO ()
+                                   , displayDot_ :: Text -> IO ()
+                                   , displayMatplotlib_ :: M.Matplotlib -> IO ()
+                                   }
+
+setDisplay :: (Text -> IO ()) -> (String -> IO ()) -> (M.Matplotlib -> IO ()) -> IO ()
+setDisplay f g h = writeIORef displayByType (DisplayByType
+                                             { displayText_ = f
+                                             , displaySvg_ = f
+                                             , displayDot_ = g . T.unpack
+                                             , displayMatplotlib_ = h
+                                             })
+
+displayShow :: forall a. Show a => a -> IO ()
+displayShow x = (flip displayText_) (T.pack $ show x) =<< readIORef displayByType
+displayText :: Text -> IO ()
+displayText x = (flip displayText_) x =<< readIORef displayByType
+displaySvg :: Text -> IO ()
+displaySvg x = (flip displaySvg_) x =<< readIORef displayByType
+displayDot :: Text -> IO ()
+displayDot x = (flip displayDot_) x =<< readIORef displayByType
+displayMatplotlib :: M.Matplotlib -> IO ()
+displayMatplotlib x = (flip displayMatplotlib_) x =<< readIORef displayByType
+
+displayByType :: IORef DisplayByType
+{-# NOINLINE displayByType #-}
+displayByType =
+  unsafePerformIO (newIORef $ DisplayByType
+                   { displayText_ = T.putStrLn
+                   , displaySvg_ = \t ->
+                       withSystemTempDirectory "haskell-torch"
+                         (\f -> do
+                             let filename = f <> "a.svg"
+                             let outfilename = f <> "a.png"
+                             T.writeFile filename t
+                             _ <- S.shelly $ S.verbosely $ do
+                               S.run_ "convert" [T.pack filename, T.pack outfilename]
+                               S.lastExitCode
+                             _ <- S.shelly $ S.verbosely $ do
+                               S.run_ "feh" [T.pack outfilename]
+                               S.lastExitCode
+                             pure ())
+                   , displayDot_ = \t ->
+                       withSystemTempDirectory "haskell-torch"
+                         (\f -> do
+                             let filename = f <> "a.dot"
+                             let outfilename = f <> "a.png"
+                             T.writeFile filename t
+                             _ <- S.shelly $ S.verbosely $ do
+                               S.run_ "dot" [T.pack filename,"-Tpng","-o", T.pack outfilename]
+                               S.lastExitCode
+                             _ <- S.shelly $ S.verbosely $ do
+                               S.run_ "feh" [T.pack outfilename]
+                               S.lastExitCode
+                             pure ())
+                   , displayMatplotlib_ = \m -> M.onscreen m
+                   })
 
 -- * Demoting types to values
 

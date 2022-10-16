@@ -1,0 +1,102 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           dataframe
+version:        0.8.0.0
+synopsis:       Haskell data frames, the equivalent of Pandas
+description:    Please see the README on Github at <https://github.com/abarbu/haskell-torch#readme>
+category:       AI
+homepage:       https://github.com/abarbu/haskell-torch
+bug-reports:    https://github.com/abarbu/haskell-torch/issues
+author:         Andrei Barbu
+maintainer:     andrei@0xab.com
+copyright:      2018 Andrei Barbu
+license:        BSD3
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/abarbu/haskell-torch
+
+library
+  exposed-modules:
+      Barbies.FieldName
+      Barbies.TH
+      Barbies.TH.Config
+      Generics.SOP.Record
+      Generics.SOP.Record.Combination
+      Generics.SOP.Record.SubTyping
+      Text.Tabulate
+  other-modules:
+      Paths_dataframe
+  hs-source-dirs:
+      src
+  build-depends:
+      aeson
+    , array
+    , barbies
+    , base >=4.7 && <5
+    , binary
+    , boxes
+    , bytestring
+    , cassava
+    , containers
+    , data-default
+    , deepseq
+    , directory
+    , extra
+    , filepath
+    , generics-eot
+    , generics-sop
+    , ghc-prim
+    , hashable
+    , hashtables
+    , haskell-src-exts
+    , haskell-src-meta
+    , hostname
+    , ieee754
+    , interpolateIO
+    , lens
+    , matplotlib
+    , megaparsec
+    , microlens
+    , monad-control
+    , monad-logger
+    , monad-loops
+    , mtl
+    , parser-combinators
+    , pipes
+    , pipes-aeson
+    , pipes-bytestring
+    , pipes-concurrency
+    , pipes-csv
+    , pipes-extras
+    , pipes-group
+    , pipes-parse
+    , pipes-safe
+    , pptable
+    , prettyprinter
+    , proto-lens
+    , random
+    , safe-exceptions
+    , shelly
+    , singletons
+    , split
+    , statistics
+    , string-qq
+    , syb
+    , template-haskell
+    , temporary
+    , text
+    , time
+    , unix
+    , vector
+    , vector-algorithms
+    , yaml
+    , zlib
+  default-language: Haskell2010

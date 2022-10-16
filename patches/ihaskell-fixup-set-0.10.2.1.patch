@@ -1,0 +1,36 @@
+diff --git a/src/IHaskell/Eval/Util.hs b/src/IHaskell/Eval/Util.hs
+index 945033a..c0de7d3 100644
+--- a/src/IHaskell/Eval/Util.hs
++++ b/src/IHaskell/Eval/Util.hs
+@@ -57,6 +57,7 @@ import           InstEnv (ClsInst(..))
+ import           Unify (tcMatchTys)
+ import qualified Pretty
+ import qualified Outputable as O
++import           DynamicLoading (initializePlugins)
+ #endif
+ #if MIN_VERSION_ghc(8,6,0)
+ #else
+@@ -220,10 +221,10 @@ setFlags ext = do
+   flags <- getSessionDynFlags
+   (flags', unrecognized, warnings) <- parseDynamicFlags flags (map noLoc ext)
+ 
+-  -- First, try to check if this flag matches any extension name.
+-  let restoredPkgs = flags' { packageFlags = packageFlags flags }
+-  _ <- GHC.setProgramDynFlags restoredPkgs
+-  GHC.setInteractiveDynFlags restoredPkgs
++  hsc_env <- GHC.getSession
++  flags'' <- liftIO (initializePlugins hsc_env (flags' { packageFlags = packageFlags flags }))
++  _ <- GHC.setProgramDynFlags flags''
++  GHC.setInteractiveDynFlags flags''
+ 
+   -- Create the parse errors.
+   let noParseErrs = map (("Could not parse: " ++) . unLoc) unrecognized
+@@ -232,7 +233,7 @@ setFlags ext = do
+ #else
+       allWarns = map unLoc warnings ++
+ #endif
+-                 ["-package not supported yet" | packageFlags flags /= packageFlags flags']
++                 ["-package not supported yet" | packageFlags flags /= packageFlags flags'']
+       warnErrs = map ("Warning: " ++) allWarns
+   return $ noParseErrs ++ warnErrs
+ 

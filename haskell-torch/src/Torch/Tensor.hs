@@ -108,14 +108,14 @@ writeToNewTensor f = do
   o <- C.emptyTensorOptions (cDeviceType (demote @ki))
                            (cScalarType (demote @ty))
                            (boolc False)
-  t <- C.empty__aom (demoteNv @sz) o (fromIntegral $ fromEnum C.MemoryFormatContiguous)
+  t <- C.empty__aom (demoteNv @sz) o Nothing
   _ <- f t
   pure (Tensor t Nothing)
 
 -- * Scalars
 
 toScalar :: forall ty ki. (TensorConstraints ty ki '[])
-         => (TensorTyToHs ty) -> IO (Tensor ty ki '[])
+         => TensorTyToHs ty -> IO (Tensor ty ki '[])
 toScalar n = toDevice =<< fromVectorNoCopy (V.singleton (coerce (hsScalarToC n)))
 
 fromScalar :: (IsScalarLike sz ~ True, TensorConstraints ty ki sz)
@@ -242,7 +242,7 @@ empty = do
   o <- C.emptyTensorOptions (cDeviceType (demote @ki))
                            (cScalarType (demote @ty))
                            (boolc False)
-  tp <- C.empty__aom (demoteNv @sz) o (fromIntegral $ fromEnum C.MemoryFormatContiguous)
+  tp <- C.empty__aom (demoteNv @sz) o Nothing
   pure $ Tensor tp Nothing
 
 -- | A tensor of all 0s
@@ -271,14 +271,14 @@ linspace :: forall ty ki sz. (TensorConstraints ty ki '[sz], KnownNat sz)
 linspace start end = do
   start' <- toCScalar @ty @ki (hsScalarToC start)
   end'   <- toCScalar @ty @ki (hsScalarToC end)
-  writeToNewTensor (\ptr -> C.linspace_out__tss6 ptr start' end' (fromIntegral $ demoteN @sz))
+  writeToNewTensor (\ptr -> C.linspace_out__tss6 ptr start' end' (Just $ fromIntegral $ demoteN @sz))
 
 logspace :: forall ty ki sz. (TensorConstraints ty ki '[sz], KnownNat sz)
        => TensorTyToHs ty -> TensorTyToHs ty -> Double -> IO (Tensor ty ki '[sz])
 logspace start end base = do
   start' <- toCScalar @ty @ki (hsScalarToC start)
   end'   <- toCScalar @ty @ki (hsScalarToC end)
-  writeToNewTensor (\ptr -> C.logspace_out__tss6d ptr start' end' (fromIntegral $ demoteN @sz) (coerce base))
+  writeToNewTensor (\ptr -> C.logspace_out__tss6d ptr start' end' (Just $ fromIntegral $ demoteN @sz) (coerce base))
 
 eye :: forall ty ki sz0 sz1. (TensorConstraints ty ki sz0, SingI sz1) => IO (Tensor ty ki '[sz0,sz1])
 eye = writeToNewTensor (\ptr -> C.eye_out__t66 ptr (demoteN @sz0) (demoteN @sz1))
@@ -308,8 +308,7 @@ fromPtr' :: forall ty sz. (TensorConstraints ty KCpu sz)
          => Ptr (TensorTyToHsC ty) -> IO (Tensor ty KCpu sz)
 fromPtr' d = do
   d' <- newForeignPtr finalizerFree (coerce d)
-  t <- fromPtr d (Just d')
-  pure t
+  fromPtr d (Just d')
 
 -- | Convert a Storable Vector to a Tensor. This copies the storage!
 fromVector :: forall ty sz. (TensorConstraints ty KCpu sz)
@@ -399,7 +398,7 @@ withDataPtr t@(Tensor p _) f = do
 rand :: forall ty ki sz. (TensorConstraints ty ki sz) => IO (Tensor ty ki sz)
 rand = do
   g <- generatorFor (demote @ki)
-  writeToNewTensor (\ptr -> C.rand_out__tag ptr (demoteNv @sz) g)
+  writeToNewTensor (\ptr -> C.rand_out__tag ptr (demoteNv @sz) (Just g))
 
 -- | Create a tensor with normally distributed data
 -- >>> numel <$> randn @TFloat @KCpu @'[3,1]
@@ -408,13 +407,13 @@ randn :: forall ty ki sz. (TensorConstraints ty ki sz, IsFloatTy ty ~ 'True)
       => IO (Tensor ty ki sz)
 randn = do
   g <- generatorFor (demote @ki)
-  writeToNewTensor (\ptr -> C.randn_out__tag ptr (demoteNv @sz) g)
+  writeToNewTensor (\ptr -> C.randn_out__tag ptr (demoteNv @sz) (Just g))
 
 randint :: forall ty ki sz. (TensorConstraints ty ki sz)
         => Int64 -> Int64 -> IO (Tensor ty ki sz)
 randint low high = do
   g <- generatorFor (demote @ki)
-  writeToNewTensor (\ptr -> C.randint_out__t66ag ptr low high (demoteNv @sz) g)
+  writeToNewTensor (\ptr -> C.randint_out__t66ag ptr low high (demoteNv @sz) (Just g))
 
 -- * AD operations
 
@@ -482,7 +481,7 @@ gradient :: Tensor ty ki sz -> IO (Maybe (Tensor ty ki sz))
 gradient (Tensor ptr x) = do
   g <- CV.grad (castForeignPtr ptr)
   def <- C.is_defined (castForeignPtr g)
-  pure $ if (cbool def) then
+  pure $ if cbool def then
            -- Gradients need the parent pointer to be alive, not its storage
            -- grad storage is disjoint from primal storage
            Just (Tensor (castForeignPtr g) (Just (castForeignPtr ptr))) else
@@ -492,7 +491,7 @@ clearGradinet :: Tensor ty ki sz -> IO ()
 clearGradinet (Tensor ptr _) = do
   g <- CV.grad (castForeignPtr ptr)
   def <- C.is_defined (castForeignPtr g)
-  when (cbool def) $ (C.zero___t (castForeignPtr g) >> pure ())
+  when (cbool def) (C.zero___t (castForeignPtr g) >> pure ())
   pure ()
 
 disableGrad :: IO ()
@@ -552,7 +551,7 @@ detachAny r@(AnyTensor (Tensor tp _)) = C.detach___t tp >> pure r
 --   between the CPU<->GPU.
 copy :: forall ty' ki' sz' ty ki sz.
        (TensorConstraints ty' ki' sz, SingI sz', Product sz ~ Product sz')
-     => (Tensor ty ki sz) -> IO (Tensor ty' ki' sz')
+     => Tensor ty ki sz -> IO (Tensor ty' ki' sz')
 copy (Tensor tp _) = writeToNewTensor (\ptr -> C.copy__mtb ptr tp (boolc False))
 
 -- | Copy data from this tensor to a new one that stores a different kind of
@@ -560,9 +559,9 @@ copy (Tensor tp _) = writeToNewTensor (\ptr -> C.copy__mtb ptr tp (boolc False))
 -- return the same type is free. The first type argument is the destination type.
 toType :: forall ty' ty ki sz.
        (TensorConstraints ty' ki sz)
-     => (Tensor ty ki sz) -> IO (Tensor ty' ki sz)
+     => Tensor ty ki sz -> IO (Tensor ty' ki sz)
 toType (Tensor tp x) =
-  case ((sing :: Sing ty) %~ (sing :: Sing ty')) of
+  case (sing :: Sing ty) %~ (sing :: Sing ty') of
     (Proved Refl) -> pure $ Tensor tp x -- FIXME This is very sketchy! You can never rely on toType with these semantics.
     _             -> writeToNewTensor (\ptr -> C.copy__mtb ptr tp (boolc False))
 
@@ -572,7 +571,7 @@ toDevice :: forall ty ki ki' sz.
            (TensorConstraints ty ki' sz, SingI ki, SingI ki')
          => Tensor ty ki sz -> IO (Tensor ty ki' sz)
 toDevice ten@(Tensor tp x) = do
-  case ((sing :: Sing ki) %~ (sing :: Sing ki')) of
+  case (sing :: Sing ki) %~ (sing :: Sing ki') of
     (Proved Refl) -> pure $ Tensor tp x
     _ -> do
 #if WITH_CUDA
@@ -597,7 +596,7 @@ toCuda = toDevice
 #endif
 
 clone :: forall ty ki sz. Tensor ty ki sz -> IO (Tensor ty ki sz)
-clone (Tensor tp _) = C.clone__tm tp (fromIntegral $ fromEnum  C.MemoryFormatPreserve) >>= \tp' -> pure (Tensor tp' Nothing)
+clone (Tensor tp _) = C.clone__tm tp Nothing >>= \tp' -> pure (Tensor tp' Nothing)
 
 expandAs :: forall ty ki ty' ki' sz sz'. (SingI (BroadcastSizes sz sz'))
          => Tensor ty ki sz -> Tensor ty' ki' sz' -> IO (Tensor ty ki (BroadcastSizes sz sz'))
@@ -902,7 +901,7 @@ select t@(Tensor tptr _) n =
   if | n < 0 -> select @dimension t (demoteN @(SelectIndex sz dimension) + n)
      | n >= demoteN @(SelectIndex sz dimension) ->
          error $ "Index too large in select: " ++ show n ++ " vs the size of the tensor " ++ show (demote @(SelectIndex sz dimension))
-                 ++ " (full size " ++ (show  $ demoteNs @sz) ++ " on dimension " ++ (show $ demote @dimension)
+                 ++ " (full size " ++ show (demoteNs @sz) ++ " on dimension " ++ (show $ demote @dimension)
      | otherwise -> wrapTensorM (C.select__t66 tptr (demoteN @dimension) n) Nothing
 
 unbind :: forall (dimension :: Nat) ty ki sz.
@@ -1017,12 +1016,12 @@ narrowFromToByLength Dimension Size x@(Tensor t a) start = do
 sum :: forall ty ki sz.
     (Num (TensorTyToHsC ty), Storable (TensorTyToHsC ty), SingI ty)
   => Tensor ty ki sz -> IO (Scalar ty ki)
-sum (Tensor t _) = wrapTensorM (C.sum__ts t $ cScalarType' (demote @ty)) Nothing
+sum (Tensor t _) = wrapTensorM (C.sum__ts t $ Just $ cScalarType' (demote @ty)) Nothing
 
 prod :: forall ty ki sz.
     (Num (TensorTyToHsC ty), Storable (TensorTyToHsC ty), SingI ty)
   => Tensor ty ki sz -> IO (Scalar ty ki)
-prod (Tensor t _) = wrapTensorM (C.prod__ts t $ cScalarType' (demote @ty)) Nothing
+prod (Tensor t _) = wrapTensorM (C.prod__ts t $ Just $ cScalarType' (demote @ty)) Nothing
 
 -- | Prod along a dimension
 prodDim :: forall dimension ty ki sz.
@@ -1032,7 +1031,7 @@ prodDim :: forall dimension ty ki sz.
         -> Tensor ty ki sz
         -> IO (Tensor ty ki (RemoveDimension sz dimension))
 prodDim Dimension x@(Tensor t _) =
-  wrapTensorM (C.prod__t6bs t (demoteN @dimension) (boolc False) $ cScalarType' (demote @ty)) Nothing
+  wrapTensorM (C.prod__t6bs t (demoteN @dimension) (boolc False) $ Just $ cScalarType' (demote @ty)) Nothing
 
 -- | Keep the dimension and replace it with size 1
 prodKeepDim :: forall dimension ty ki sz.
@@ -1042,7 +1041,7 @@ prodKeepDim :: forall dimension ty ki sz.
         -> Tensor ty ki sz
         -> IO (Tensor ty ki (ReplaceDimension sz dimension 1))
 prodKeepDim Dimension x@(Tensor t _) =
-  wrapTensorM (C.prod__t6bs t (demoteN @dimension) (boolc True) $ cScalarType' (demote @ty)) Nothing
+  wrapTensorM (C.prod__t6bs t (demoteN @dimension) (boolc True) $ Just $ cScalarType' (demote @ty)) Nothing
 
 pow :: forall ty ki sz.
       (Num (TensorTyToHsC ty), Storable (TensorTyToHsC ty), SingI ty)
@@ -1065,7 +1064,7 @@ maxDim :: forall (dimension :: Nat) ty ki sz.
          ,Tensor TLong ki (RemoveDimension sz dimension))
 maxDim x@(Tensor t _) = do
   (tv, ti) <- C.max__t6b t (demoteN @dimension) (boolc False)
-  pure $ (Tensor tv Nothing, Tensor ti Nothing)
+  pure (Tensor tv Nothing, Tensor ti Nothing)
 
 -- | Find the minimum along a dimension.
 minDim :: forall (dimension :: Nat) ty ki sz.
@@ -1081,7 +1080,7 @@ minDim x@(Tensor t _) = do
 mean :: forall ty ki sz.
        (SingI ty, SingI ki, SingI sz) =>
        Tensor ty ki sz -> IO (Scalar ty ki)
-mean x@(Tensor t _) = wrapTensorM (C.mean__ts t $ cScalarType' (demote @ty)) Nothing
+mean x@(Tensor t _) = wrapTensorM (C.mean__ts t $ Just $ cScalarType' (demote @ty)) Nothing
 
 -- | Mean along a dimension
 meanDim :: forall dimension ty ki sz.
@@ -1091,7 +1090,7 @@ meanDim :: forall dimension ty ki sz.
         -> Tensor ty ki sz
         -> IO (Tensor ty ki (RemoveDimension sz dimension))
 meanDim Dimension x@(Tensor t _) =
-  wrapTensorM (C.mean__tabs t (V.fromList [demoteN @dimension]) (boolc False) $ cScalarType' (demote @ty)) Nothing
+  wrapTensorM (C.mean__tabs t (V.fromList [demoteN @dimension]) (boolc False) $ Just $ cScalarType' (demote @ty)) Nothing
 
 -- | Keep the dimension and replace it with size 1
 meanKeepDim :: forall dimension ty ki sz.
@@ -1101,7 +1100,7 @@ meanKeepDim :: forall dimension ty ki sz.
         -> Tensor ty ki sz
         -> IO (Tensor ty ki (ReplaceDimension sz dimension 1))
 meanKeepDim Dimension x@(Tensor t _) =
-  wrapTensorM (C.mean__tabs t (V.fromList [demoteN @dimension]) (boolc True) $ cScalarType' (demote @ty)) Nothing
+  wrapTensorM (C.mean__tabs t (V.fromList [demoteN @dimension]) (boolc True) $ Just $ cScalarType' (demote @ty)) Nothing
 
 -- | The median of a tensor.
 median :: forall ty ki sz.
@@ -1480,7 +1479,7 @@ rrelu lower upper dataPurpose x@(Tensor t _) = do
   x <- toCScalar @ty @ki (hsScalarToC lower)
   y <- toCScalar @ty @ki (hsScalarToC upper)
   gen <- generatorFor (demote @ki)
-  wrapTensorM (C.rrelu__tssbg t x y (boolc (dataPurpose == Train)) gen) Nothing
+  wrapTensorM (C.rrelu__tssbg t x y (boolc (dataPurpose == Train)) (Just gen)) Nothing
 
 -- TODO Do we want dim to be statically checked?
 glu :: forall ty ki sz. Tensor ty ki sz -> Int64 -> IO (Tensor ty ki sz)
@@ -1512,10 +1511,10 @@ softplus x@(Tensor t _) beta threshold = do
   wrapTensorM (C.softplus__tss t x y) Nothing
 
 softmax :: forall ty ki sz. Tensor ty ki sz -> Int64 -> IO (Tensor ty ki sz)
-softmax t@(Tensor p _) dim = wrapTensorM (C.softmax__t6s p dim $ cScalarType' (demote @ty)) Nothing
+softmax t@(Tensor p _) dim = wrapTensorM (C.softmax__t6s p dim $ Just $ cScalarType' (demote @ty)) Nothing
 
 logSoftmax :: forall ty ki sz. Tensor ty ki sz -> Int64 -> IO (Tensor ty ki sz)
-logSoftmax t@(Tensor p _) dim = wrapTensorM (C.log_softmax__t6s p dim $ cScalarType' (demote @ty)) Nothing
+logSoftmax t@(Tensor p _) dim = wrapTensorM (C.log_softmax__t6s p dim $ Just $ cScalarType' (demote @ty)) Nothing
 
 softmin :: forall ty ki sz. (TensorConstraints ty ki sz) => Tensor ty ki sz -> Int64 -> IO (Tensor ty ki sz)
 softmin t dim = do
@@ -1565,7 +1564,7 @@ batchNorm2d_ (BatchNormState bn) affineParams (BNMomentum momentum) (BNEpsilon e
                    pure (mean,var)
                  (Just mean, Just var) -> pure (mean,var)
                  _ -> error "This is impossible and a bug!"
-  r <- C.batch_norm__tttttbddb t w b (tensorPtr mean) (tensorPtr var)
+  r <- C.batch_norm__tttttbddb t (Just w) (Just b) (Just $ tensorPtr mean) (Just $ tensorPtr var)
                               (boolc (dp == Train)) (CDouble momentum)
                               (CDouble epsilon) (boolc True)
   pure $ Tensor r a
@@ -1638,15 +1637,15 @@ genericRNN :: forall ty ki gateSize inF hiddenF nrLayers isBidirectional batchFi
         -> IO cret
 genericRNN fn InFeatures HiddenFeatures NrLayers IsBidirectional dropout dataPurpose batchFirst
         GenericRNNParam{..} statep inp = do
-  let lWihN = (map (tensorPtr.debuggingVerifyShape "1") $ toListDirection grnnParamWih0)
-            ++ (map (tensorPtr.debuggingVerifyShape "2") $ concat $ VB.toList $ VB.map toListDirection grnnParamWihN1)
-  let lWhhN = map (tensorPtr.debuggingVerifyShape "3") $ concat $ VB.toList $ VB.map toListDirection grnnParamWhhN
+  let lWihN = map tensorPtr (toListDirection grnnParamWih0)
+            ++ map tensorPtr (concat $ VB.toList $ VB.map toListDirection grnnParamWihN1)
+  let lWhhN = map tensorPtr $ concat $ VB.toList $ VB.map toListDirection grnnParamWhhN
   let mlBihN = case grnnParamBihN of
                  Nothing -> Nothing
-                 Just x  -> Just $ map (tensorPtr.debuggingVerifyShape "4") $ concat $ VB.toList $ VB.map toListDirection x
+                 Just x  -> Just $ map tensorPtr $ concat $ VB.toList $ VB.map toListDirection x
   let mlBhhN = case grnnParamBhhN of
                  Nothing -> Nothing
-                 Just x  -> Just $ map (tensorPtr.debuggingVerifyShape "5") $ concat $ VB.toList $ VB.map toListDirection x
+                 Just x  -> Just $ map tensorPtr $ concat $ VB.toList $ VB.map toListDirection x
   let params = case (mlBihN, mlBhhN) of
                  (Nothing, Nothing)       -> concat $ zipWith (\x y -> [x,y]) lWihN lWhhN
                  (Just lBihN, Just lBhhN) -> concat $ zipWith4 (\x y z w -> [x,y,z,w]) lWihN lWhhN lBihN lBhhN
@@ -1864,13 +1863,15 @@ rnnReluCell InFeatures HiddenFeatures
             (RNNCellParam twih@(Tensor wih _) (Just tbih@(Tensor bih _))
                           twhh@(Tensor whh _) (Just tbhh@(Tensor bhh  _)))
             tin@(Tensor inp _) tstate@(Tensor statep _) = do
-  statep' <- C.rnn_relu_cell__tttttt inp statep wih whh bih bhh
+  statep' <- C.rnn_relu_cell__tttttt inp statep wih whh (Just bih) (Just bhh)
   pure (Tensor statep' Nothing)
 rnnReluCell InFeatures HiddenFeatures
             (RNNCellParam twih@(Tensor wih _) Nothing
                           twhh@(Tensor whh _) Nothing)
             tin@(Tensor inp _) tstate@(Tensor statep _) = do
-  statep' <- C.rnn_relu_cell__tttttt inp statep wih whh (unsafePerformIO C.undefinedTensor) (unsafePerformIO C.undefinedTensor)
+  statep' <- C.rnn_relu_cell__tttttt inp statep wih whh Nothing Nothing
+  -- TODO Check that Nothing works here!
+  -- (unsafePerformIO C.undefinedTensor) (unsafePerformIO C.undefinedTensor)
   pure (Tensor statep' Nothing)
 
 rnnTanhCell :: forall ty ki nr inF hiddenF.
@@ -1887,13 +1888,15 @@ rnnTanhCell InFeatures HiddenFeatures
             (RNNCellParam twih@(Tensor wih _) (Just tbih@(Tensor bih _))
                           twhh@(Tensor whh _) (Just tbhh@(Tensor bhh  _)))
             tin@(Tensor inp _) tstate@(Tensor statep _) = do
-  statep' <- C.rnn_tanh_cell__tttttt inp statep wih whh bih bhh
+  statep' <- C.rnn_tanh_cell__tttttt inp statep wih whh (Just bih) (Just bhh)
   pure (Tensor statep' Nothing)
 rnnTanhCell InFeatures HiddenFeatures
             (RNNCellParam twih@(Tensor wih _) Nothing
                           twhh@(Tensor whh _) Nothing)
             tin@(Tensor inp _) tstate@(Tensor statep _) = do
-  statep' <- C.rnn_tanh_cell__tttttt inp statep wih whh (unsafePerformIO C.undefinedTensor) (unsafePerformIO C.undefinedTensor)
+  statep' <- C.rnn_tanh_cell__tttttt inp statep wih whh Nothing Nothing
+  -- TODO Check that Nothing works here!
+  -- (unsafePerformIO C.undefinedTensor) (unsafePerformIO C.undefinedTensor)
   pure (Tensor statep' Nothing)
 
 -- * Single-tensor mathematical operations
@@ -1935,7 +1938,7 @@ clamp :: forall ty ki sz. TensorTyToHs ty -> TensorTyToHs ty -> Tensor ty ki sz 
 clamp lower upper  x@(Tensor t _) = do
   l <- toCScalar @ty @ki (hsScalarToC lower)
   u <- toCScalar @ty @ki (hsScalarToC upper)
-  wrapTensorM (C.clamp__tss t l u) Nothing
+  wrapTensorM (C.clamp__tss t (Just l) (Just u)) Nothing
 
 clampMax :: forall ty ki sz. TensorTyToHs ty -> Tensor ty ki sz -> IO (Tensor ty ki sz)
 clampMax upper x@(Tensor t _) = do
@@ -2203,13 +2206,13 @@ pinverse (Tensor t _) rcond = wrapTensorM (C.pinverse__td t (coerce rcond)) Noth
 bernoulli :: forall ty ki sz. (IsFloatTy ty ~ True)
           => Tensor ty ki sz -> IO (Tensor ty ki sz)
 bernoulli (Tensor input _) =
-  wrapTensorM (C.bernoulli__tg input =<< generatorFor (demote @ki)) Nothing
+  wrapTensorM (C.bernoulli__tg input . pure =<< generatorFor (demote @ki)) Nothing
 
 uniform :: forall ty ki sz. (IsFloatTy ty ~ True, SingI sz, TensorConstraints ty ki sz)
         => Double -> Double -> IO (Tensor ty ki sz)
 uniform l h = do
   t@(Tensor ptr _) <- empty
-  _ <- C.uniform__mddg ptr (CDouble l) (CDouble h) =<< generatorFor (demote @ki)
+  _ <- C.uniform__mddg ptr (CDouble l) (CDouble h) . pure =<< generatorFor (demote @ki)
   pure t
 
 -- TODO need to audit all the uses of IsFloat, not sure we actually need them
@@ -2218,7 +2221,7 @@ multinomialVector :: forall (size :: Nat) (replacement :: Bool) ty ki n.
                     ,EnoughIndicesForReplacement replacement size n ~ True)
                   => Size size -> Replacement replacement -> Tensor ty ki '[n] -> IO (Tensor TLong ki '[size])
 multinomialVector Size Replacement (Tensor t _) =
-  wrapTensorM (C.multinomial_m6bg t (demoteN @size) (boolc (demote @replacement)) =<< generatorFor (demote @ki)) Nothing
+  wrapTensorM (C.multinomial_m6bg t (demoteN @size) (boolc (demote @replacement)) . pure =<< generatorFor (demote @ki)) Nothing
 
 -- TODO need to audit all the uses of IsFloat, not sure we actually need them
 multinomialMatrix :: forall (size :: Nat) (replacement :: Bool) ty ki n m.
@@ -2226,7 +2229,7 @@ multinomialMatrix :: forall (size :: Nat) (replacement :: Bool) ty ki n m.
                     ,EnoughIndicesForReplacement replacement size n ~ True)
                   => Size size -> Replacement replacement -> Tensor ty ki '[m,n] -> IO (Tensor TLong ki '[m,size])
 multinomialMatrix Size Replacement (Tensor t _) =
-  wrapTensorM (C.multinomial_m6bg t (demoteN @size) (boolc (demote @replacement)) =<< generatorFor (demote @ki)) Nothing
+  wrapTensorM (C.multinomial_m6bg t (demoteN @size) (boolc (demote @replacement)) . pure =<< generatorFor (demote @ki)) Nothing
 
 where' :: Tensor TBool ki sz -> Tensor ty ki sz -> Tensor ty ki sz -> IO (Tensor ty ki sz)
 where' (Tensor b _) (Tensor t _) (Tensor f _) =
@@ -2250,11 +2253,11 @@ conv1d :: forall ty ki nr kernelSize outChans inChans inLen  outLen stride paddi
        -> (Tensor ty ki '[outChans, Div inChans groups, kernelSize]
          ,Maybe (Tensor ty ki '[outChans]))
        -> Tensor ty ki '[nr, inChans, inLen] -> IO (Tensor ty ki '[nr, outChans, outLen])
-conv1d InChannels OutChannels Kernel Stride Padding Dilation Groups ((Tensor tw _), bias) (Tensor ti _) = do
+conv1d InChannels OutChannels Kernel Stride Padding Dilation Groups (Tensor tw _, bias) (Tensor ti _) = do
   tb <- case bias of
          Nothing -> tensorPtr <$> (zeros @ty @ki @'[outChans])
          Just x  -> pure $ tensorPtr x
-  t' <- C.conv1d__tttaaa6 ti tw tb
+  t' <- C.conv1d__tttaaa6 ti tw (Just tb)
                 (V.singleton (demoteN @stride))
                 (V.singleton (demoteN @padding))
                 (V.singleton (demoteN @dilation))
@@ -2278,14 +2281,14 @@ conv2d :: forall inChans ty ki nr outChans inH inW outH outW groups
        -> Padding '(paddingH, paddingW)
        -> Dilation '(dilationH, dilationW)
        -> Groups groups
-       -> (ConvParam ty ki outChans '[Div inChans groups, kernelH, kernelW])
+       -> ConvParam ty ki outChans '[Div inChans groups, kernelH, kernelW]
        -> Tensor ty ki '[nr, inChans, inH, inW]
        -> IO (Tensor ty ki '[nr, outChans, outH, outW])
 conv2d InChannels OutChannels Kernel Stride Padding Dilation Groups (ConvParam (Tensor tw _) bias) (Tensor ti _)  = do
   tb <- case bias of
          Nothing -> tensorPtr <$> zeros @ty @ki @'[outChans]
          Just x  -> pure $ tensorPtr x
-  t' <- C.conv2d__tttaaa6 ti tw tb
+  t' <- C.conv2d__tttaaa6 ti tw (Just tb)
                 (V.fromList [demoteN @strideH, demoteN @strideW])
                 (V.fromList [demoteN @paddingH, demoteN @paddingW])
                 (V.fromList [demoteN @dilationH, demoteN @dilationW])
@@ -2311,14 +2314,14 @@ conv3d :: forall ty ki nr inChans inD inH inW outChans outD outH outW
        -> Padding '(paddingD, paddingH, paddingW)
        -> Dilation '(dilationD, dilationH, dilationW)
        -> Groups groups
-       -> (ConvParam ty ki outChans '[Div inChans groups, kernelH, kernelW])
+       -> ConvParam ty ki outChans '[Div inChans groups, kernelH, kernelW]
        -> Tensor ty ki '[nr, inChans, inD, inH, inW]
        -> IO (Tensor ty ki '[nr, outChans, outD, outH, outW])
 conv3d InChannels OutChannels Kernel Stride Padding Dilation Groups (ConvParam (Tensor weights _) bias) (Tensor input _) = do
   tb <- case bias of
          Nothing -> tensorPtr <$> zeros @ty @ki @'[outChans]
          Just x  -> pure $ tensorPtr x
-  t' <- C.conv3d__tttaaa6 input weights tb
+  t' <- C.conv3d__tttaaa6 input weights (Just tb)
                 (V.fromList [demoteN @strideD, demoteN @strideH, demoteN @strideW])
                 (V.fromList [demoteN @paddingD, demoteN @paddingH, demoteN @paddingW])
                 (V.fromList [demoteN @dilationD, demoteN @dilationH, demoteN @dilationW])
@@ -2478,7 +2481,7 @@ maxPool1d Kernel Stride Padding CeilMode (Tensor input _) = do
                                              (V.fromList [demoteN @paddingW])
                                              (V.fromList [demoteN @dilationW])
                                              (boolc (demote @ceilMode))
-  pure $ (Tensor t' Nothing, Tensor ti' Nothing)
+  pure (Tensor t' Nothing, Tensor ti' Nothing)
 
 -- | 2D Max pooling
 -- TODO We don't support ceil mode here!
@@ -2507,7 +2510,7 @@ maxPool2d Kernel Stride Padding Dilation CeilMode (Tensor input _) = do
                                              (V.fromList [demoteN @paddingH, demoteN @paddingW])
                                              (V.fromList [demoteN @dilationH, demoteN @dilationW])
                                              (boolc (demote @ceilMode))
-  pure $ (Tensor t' Nothing, Tensor ti' Nothing)
+  pure (Tensor t' Nothing, Tensor ti' Nothing)
 
 -- | 3D Max pooling
 -- TODO We don't support ceil mode here!
@@ -2537,7 +2540,7 @@ maxPool3d Kernel Stride Padding CeilMode (Tensor input _) = do
                                              (V.fromList [demoteN @paddingD, demoteN @paddingH, demoteN @paddingW])
                                              (V.fromList [demoteN @dilationD, demoteN @dilationH, demoteN @dilationW])
                                              (boolc (demote @ceilMode))
-  pure $ (Tensor t' Nothing, Tensor ti' Nothing)
+  pure (Tensor t' Nothing, Tensor ti' Nothing)
 
 -- | Adaptive 1D max pooling takes an output size and finds max pooling parameters
 -- to achieve that size.
@@ -2779,18 +2782,15 @@ nllLoss :: forall ty ki sz nrClasses.
         -> Tensor ty ki '[sz,nrClasses]           -- ^ input
         -> IO (Scalar ty ki)
 nllLoss (Tensor target _) rescaleWeights (SizeAverage sa) ignoreIndex (Tensor input _) = do
-  trescale <- case rescaleWeights of
-               Nothing           -> C.undefinedTensor
-               Just (Tensor x _) -> pure x
-  l <- C.nll_loss__ttt66 
-                input target trescale
+  wrapTensorM (C.nll_loss__ttt66 
+                input target
+                (fmap tensorPtr rescaleWeights)
                 (fromIntegral $ fromEnum $ if sa then
                                              C.ReductionMean else
                                              C.ReductionSum)
                 (case ignoreIndex of
                     Nothing -> -100
-                    Just x  -> x)
-  pure $ Tensor l Nothing
+                    Just x  -> x)) Nothing
 
 nllLosses :: forall ty ki sz nrClasses.
           (TensorConstraints ty ki '[nrClasses])
@@ -2800,10 +2800,8 @@ nllLosses :: forall ty ki sz nrClasses.
         -> Tensor ty ki '[sz,nrClasses]              -- ^ input
         -> IO (Tensor ty ki '[sz])
 nllLosses (Tensor target _) rescaleWeights ignoreIndex (Tensor input _) = do
-  trescale <- case rescaleWeights of
-               Nothing           -> C.undefinedTensor
-               Just (Tensor x _) -> pure x
-  wrapTensorM (C.nll_loss__ttt66 input target trescale (fromIntegral $ fromEnum C.ReductionNone)
+  wrapTensorM (C.nll_loss__ttt66 input target (fmap tensorPtr rescaleWeights)
+               (fromIntegral $ fromEnum C.ReductionNone)
                 (case ignoreIndex of
                     Nothing -> -100
                     Just x  -> x)) Nothing
@@ -2817,18 +2815,14 @@ nllLoss2d :: forall ty ki sz nrClasses szh szw.
           -> Tensor ty ki '[sz,nrClasses,szh,szw]        -- ^ input
           -> IO (Scalar ty ki)
 nllLoss2d (Tensor target _) rescaleWeights (SizeAverage sa) ignoreIndex (Tensor input _) = do
-  trescale <- case rescaleWeights of
-               Nothing           -> C.undefinedTensor
-               Just (Tensor x _) -> pure x
-  l <- C.nll_loss2d__ttt66
-                  input target trescale
+  wrapTensorM (C.nll_loss2d__ttt66
+                  input target (fmap tensorPtr rescaleWeights)
                   (fromIntegral $ fromEnum $ if sa then
                                                C.ReductionMean else
                                                C.ReductionSum)
                   (case ignoreIndex of
                       Nothing -> -100
-                      Just x  -> x)
-  pure $ Tensor l Nothing
+                      Just x  -> x)) Nothing
 
 nllLossess2d :: forall ty ki sz nrClasses szh szw.
             (TensorConstraints ty ki '[nrClasses,szh,szw])
@@ -2838,10 +2832,8 @@ nllLossess2d :: forall ty ki sz nrClasses szh szw.
           -> Tensor ty ki '[sz,nrClasses,szh,szw]   -- ^ input
           -> IO (Scalar ty ki)
 nllLossess2d (Tensor target _) rescaleWeights ignoreIndex (Tensor input _) = do
-  trescale <- case rescaleWeights of
-               Nothing           -> C.undefinedTensor
-               Just (Tensor x _) -> pure x
-  wrapTensorM (C.nll_loss2d__ttt66 input target trescale (fromIntegral $ fromEnum $ C.ReductionNone)
+  wrapTensorM (C.nll_loss2d__ttt66 input target (fmap tensorPtr rescaleWeights)
+               (fromIntegral $ fromEnum $ C.ReductionNone)
                 (case ignoreIndex of
                     Nothing -> -100
                     Just x  -> x)) Nothing
@@ -2884,9 +2876,10 @@ binaryCrossEntropyLoss t@(Tensor target _) weight (SizeAverage sa) (Tensor i _) 
   w <- (case weight of
           Nothing           -> C.undefinedTensor
           Just (Tensor x _) -> pure x)
-  wrapTensorM (C.binary_cross_entropy__ttt6 i target w (fromIntegral $ fromEnum $ if sa then
-                                                             C.ReductionMean else
-                                                             C.ReductionSum)) Nothing
+  wrapTensorM (C.binary_cross_entropy__ttt6 i target (Just w)
+                (fromIntegral $ fromEnum $ if sa then
+                                             C.ReductionMean else
+                                             C.ReductionSum)) Nothing
 
 -- | Compute BCE
 binaryCrossEntropyLosses :: (SingI sz)
@@ -2900,7 +2893,8 @@ binaryCrossEntropyLosses t@(Tensor target _) weight (Tensor i _) = do
   w <- (case weight of
           Nothing           -> C.undefinedTensor
           Just (Tensor x _) -> pure x)
-  wrapTensorM (C.binary_cross_entropy__ttt6 i target w (fromIntegral $ fromEnum $ C.ReductionNone)) Nothing
+  wrapTensorM (C.binary_cross_entropy__ttt6 i target (Just w)
+                (fromIntegral $ fromEnum $ C.ReductionNone)) Nothing
 
 -- * Debugging
 
@@ -2917,3 +2911,4 @@ shortPrintTensor ten@(Tensor t _) = do
           f $ V.take 10 v
           putStrLn "  ... "
           f $ V.drop (V.length v - 10) v
+

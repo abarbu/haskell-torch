@@ -1,0 +1,12 @@
+diff --git a/jupytext/languages.py b/jupytext/languages.py
+index b1a2b8d..dc2f5a4 100644
+--- a/jupytext/languages.py
++++ b/jupytext/languages.py
+@@ -48,6 +48,7 @@ _SCRIPT_EXTENSIONS = {
+     ".js": {"language": "javascript", "comment": "//"},
+     ".ts": {"language": "typescript", "comment": "//"},
+     ".scala": {"language": "scala", "comment": "//"},
++    ".hs": {"language": "haskell", "comment": "--"},
+     ".rs": {"language": "rust", "comment": "//"},
+     ".robot": {"language": "robotframework", "comment": "#"},
+     ".resource": {"language": "robotframework", "comment": "#"},

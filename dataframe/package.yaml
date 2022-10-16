@@ -1,0 +1,88 @@
+name:                dataframe
+version:             0.8.0.0
+github:              "abarbu/haskell-torch"
+license:             BSD3
+author:              "Andrei Barbu"
+maintainer:          "andrei@0xab.com"
+copyright:           "2018 Andrei Barbu"
+homepage:            https://github.com/abarbu/haskell-torch
+bug-reports:         https://github.com/abarbu/haskell-torch/issues
+category:            AI
+synopsis:            Haskell data frames, the equivalent of Pandas
+
+extra-source-files:
+- README.md
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on Github at <https://github.com/abarbu/haskell-torch#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs: src
+  dependencies:
+    - aeson
+    - array
+    - binary
+    - bytestring
+    - containers
+    - data-default
+    - directory
+    - extra
+    - filepath
+    - generics-eot
+    - hashable
+    - hashtables
+    - haskell-src-exts
+    - haskell-src-meta
+    - hostname
+    - ieee754
+    - interpolateIO
+    - matplotlib
+    - megaparsec
+    - microlens
+    - monad-control
+    - monad-loops
+    - mtl
+    - parser-combinators
+    - pipes
+    - pipes-aeson
+    - pipes-bytestring
+    - pipes-concurrency
+    - pipes-csv
+    - pipes-extras
+    - pipes-group
+    - pipes-parse
+    - pipes-safe
+    - proto-lens
+    - random
+    - safe-exceptions
+    - shelly
+    - singletons
+    - statistics
+    - string-qq
+    - syb
+    - template-haskell
+    - text
+    - time
+    - unix
+    - vector
+    - yaml
+    - zlib
+    - monad-logger
+    - temporary
+    - generics-sop
+    - deepseq
+    - ghc-prim
+    - barbies
+    - vector-algorithms
+    - prettyprinter
+    - split
+    - pptable
+    - lens
+    - boxes
+    - cassava
+

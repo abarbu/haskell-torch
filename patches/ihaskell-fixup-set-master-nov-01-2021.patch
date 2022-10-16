@@ -1,0 +1,37 @@
+diff --git a/src/IHaskell/Eval/Util.hs b/src/IHaskell/Eval/Util.hs
+index ce3200d..d22a57e 100644
+--- a/src/IHaskell/Eval/Util.hs
++++ b/src/IHaskell/Eval/Util.hs
+@@ -232,7 +232,19 @@ setExtension ext = do
+ -- (newDynFlags). It returns a list of error messages.
+ setFlags :: GhcMonad m => [String] -> m [String]
+ setFlags ext = do
+-  -- Try to parse flags.
++  -- Interactive flags first
++  -- Warnings and unrecognized flags will be handled when parsing again with session flags below
++  iflags <- getInteractiveDynFlags
++#if MIN_VERSION_ghc(9,2,0)
++  logger <- getLogger
++  (iflags', _, _) <- parseDynamicFlags logger iflags (map noLoc ext)
++#else
++  (iflags', _, _) <- parseDynamicFlags iflags (map noLoc ext)
++#endif
++  let irestoredPkgs = iflags' { packageFlags = packageFlags iflags }
++  GHC.setInteractiveDynFlags irestoredPkgs
++
++  -- Session flags next
+   flags <- getSessionDynFlags
+ #if MIN_VERSION_ghc(9,2,0)
+   logger <- getLogger
+@@ -240,11 +252,9 @@ setFlags ext = do
+ #else
+   (flags', unrecognized, warnings) <- parseDynamicFlags flags (map noLoc ext)
+ #endif
+-
+   -- First, try to check if this flag matches any extension name.
+   let restoredPkgs = flags' { packageFlags = packageFlags flags }
+   _ <- GHC.setProgramDynFlags restoredPkgs
+-  GHC.setInteractiveDynFlags restoredPkgs
+ 
+   -- Create the parse errors.
+   let noParseErrs = map (("Could not parse: " ++) . unLoc) unrecognized

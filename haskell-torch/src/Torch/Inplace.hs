@@ -24,7 +24,7 @@ import           Torch.Types
 mul_ :: forall ty ki sz sz'.
       (SingI (BroadcastSizes sz sz'))
       => Tensor ty ki sz -> Tensor ty ki sz' -> IO (Tensor ty ki sz)
-mul_ x@(Tensor{}) y@(Tensor{}) = do
+mul_ x@Tensor{} y@Tensor{} = do
   generic x y
   pure x
   where
@@ -41,7 +41,7 @@ mulScalar_ x@(Tensor t _) alpha = do
   pure x
 
 addcmul_ :: forall ty ki sz sz' sz''.
-          (SingI (BroadcastSizes sz' sz''), sz ~ (BroadcastSizes sz' sz''))
+          (SingI (BroadcastSizes sz' sz''), sz ~ BroadcastSizes sz' sz'')
         => Tensor ty ki sz
         -> TensorTyToHs ty
         -> Tensor ty ki sz'
@@ -58,7 +58,7 @@ addcmul_ (Tensor i _) val (Tensor t1 _) (Tensor t2 _) = do
 div_ :: forall ty ki sz sz'.
       (SingI (BroadcastSizes sz sz'))
       => Tensor ty ki sz -> Tensor ty ki sz' -> IO (Tensor ty ki sz)
-div_ x@(Tensor{}) y@(Tensor{}) = do
+div_ x@Tensor{} y@Tensor{} = do
   generic x y
   pure x
   where
@@ -75,7 +75,7 @@ divScalar_ x@(Tensor t _) alpha = do
   pure x
 
 addcdiv_ :: forall ty ki sz sz' sz''.
-          (SingI (BroadcastSizes sz' sz''), sz ~ (BroadcastSizes sz' sz''))
+          (SingI (BroadcastSizes sz' sz''), sz ~ BroadcastSizes sz' sz'')
         => Tensor ty ki sz
         -> TensorTyToHs ty
         -> Tensor ty ki sz'
@@ -191,7 +191,7 @@ clamp_ :: forall ty ki sz. TensorTyToHs ty -> TensorTyToHs ty -> Tensor ty ki sz
 clamp_ lower upper x@(Tensor t _) = do
   l <- toCScalar @ty @ki (hsScalarToC lower)
   u <- toCScalar @ty @ki (hsScalarToC upper)
-  C.clamp___tss t l u
+  C.clamp___tss t (Just l) (Just u)
   pure x
 
 clampMax_ :: forall ty ki sz. TensorTyToHs ty -> Tensor ty ki sz -> IO (Tensor ty ki sz)
@@ -328,7 +328,7 @@ rrelu_ x@(Tensor t a) lower upper dataPurpose = do
   x <- toCScalar @ty @ki (hsScalarToC lower)
   y <- toCScalar @ty @ki (hsScalarToC upper)
   gen <- generatorFor (demote @ki)
-  wrapTensorM (C.rrelu___tssbg t x y (boolc (dataPurpose == Train)) gen) a
+  wrapTensorM (C.rrelu___tssbg t x y (boolc (dataPurpose == Train)) (Just gen)) a
 
 sigmoid_ :: Tensor ty ki sz -> IO (Tensor ty ki sz)
 sigmoid_ x@(Tensor t a) = wrapTensorM (C.sigmoid___t t) a
@@ -388,7 +388,7 @@ calculateGain GainConv      _     = 1
 calculateGain GainSigmoid   _     = 1
 calculateGain GainTanh      _     = 5/3
 calculateGain GainRelu      _     = P.sqrt 2
-calculateGain GainLeakyRelu param = P.sqrt(2.0 / (1 + (fromMaybe 0.01 param) ** 2))
+calculateGain GainLeakyRelu param = P.sqrt(2.0 / (1 + fromMaybe 0.01 param ** 2))
 
 kaimingUniform_ :: forall sz ty ki. (TensorConstraints ty ki sz, SingI (IsFloatTy ty))
                => Tensor ty ki sz -> Maybe Double -> GainNonlinearity -> FanMode -> IO (Tensor ty ki sz)
@@ -418,7 +418,7 @@ xavierUniform_ :: forall sz ty ki. (TensorConstraints ty ki sz, SingI (IsFloatTy
                => Tensor ty ki sz -> Maybe Double -> IO (Tensor ty ki sz)
 xavierUniform_ t gain = do
   let (fanIn,fanOut)   = calculateFanInOut (demoteNs @sz)
-  let std = fromMaybe 1 gain * P.sqrt (2.0 / (fromIntegral $ fanIn + fanOut))
+  let std = fromMaybe 1 gain * P.sqrt (2.0 / fromIntegral (fanIn + fanOut))
   let a = std * P.sqrt 3 -- Calculate uniform bounds from standard deviation
   withoutGrad $ uniform_ t (- a) a
 
@@ -426,7 +426,7 @@ xavierNormal_ :: forall sz ty ki. (TensorConstraints ty ki sz, SingI (IsFloatTy 
                => Tensor ty ki sz -> Maybe Double -> IO (Tensor ty ki sz)
 xavierNormal_ t gain = do
   let (fanIn,fanOut)   = calculateFanInOut (demoteNs @sz)
-  let std = fromMaybe 1 gain * P.sqrt (2.0 / (fromIntegral $ fanIn + fanOut))
+  let std = fromMaybe 1 gain * P.sqrt (2.0 / fromIntegral (fanIn + fanOut))
   withoutGrad $ normal_ t 0 std
 
 -- * Random operations
@@ -434,49 +434,49 @@ xavierNormal_ t gain = do
 uniform_ :: forall ty ki sz. (SingI sz, TensorConstraints ty ki sz)
          => Tensor ty ki sz -> Double -> Double -> IO (Tensor ty ki sz)
 uniform_ t@(Tensor ptr _) l h = do
-  C.uniform__mddg ptr (coerce l) (coerce h) =<< generatorFor (demote @ki)
+  C.uniform__mddg ptr (coerce l) (coerce h) . pure =<< generatorFor (demote @ki)
   pure t
 
 random_ :: forall ty ki sz. (SingI sz, TensorConstraints ty ki sz)
          => Tensor ty ki sz -> Int64 -> Int64 -> IO (Tensor ty ki sz)
 random_ t@(Tensor ptr _) l h = do
-  C.random__m66g ptr (coerce l) (Just $ coerce h) =<< generatorFor (demote @ki)
+  C.random__m66g ptr (coerce l) (Just $ coerce h) . pure =<< generatorFor (demote @ki)
   pure t
 
 normal_ :: forall ty ki sz. (SingI sz, TensorConstraints ty ki sz)
         => Tensor ty ki sz -> Double -> Double -> IO (Tensor ty ki sz)
 normal_ t@(Tensor ptr _) m v = do
-  C.normal__mddg ptr (CDouble m) (CDouble v) =<< generatorFor (demote @ki)
+  C.normal__mddg ptr (CDouble m) (CDouble v) . pure =<< generatorFor (demote @ki)
   pure t
 
 bernoulli_ :: forall ty ki sz. (SingI sz, TensorConstraints ty ki sz)
            => Tensor ty ki sz -> Double -> IO (Tensor ty ki sz)
 bernoulli_ t@(Tensor ptr _) p = do
-  C.bernoulli__mdg ptr (coerce p) =<< generatorFor (demote @ki)
+  C.bernoulli__mdg ptr (coerce p) . pure =<< generatorFor (demote @ki)
   pure t
 
 exponential_ :: forall ty ki sz. (SingI sz, TensorConstraints ty ki sz)
            => Tensor ty ki sz -> Double -> IO (Tensor ty ki sz)
 exponential_ t@(Tensor ptr _) p = do
-  C.exponential__mdg ptr (coerce p) =<< generatorFor (demote @ki)
+  C.exponential__mdg ptr (coerce p) . pure =<< generatorFor (demote @ki)
   pure t
 
 geometric_ :: forall ty ki sz. (SingI sz, TensorConstraints ty ki sz)
            => Tensor ty ki sz -> Double -> IO (Tensor ty ki sz)
 geometric_ t@(Tensor ptr _) p = do
-  C.geometric__mdg ptr (coerce p) =<< generatorFor (demote @ki)
+  C.geometric__mdg ptr (coerce p) . pure =<< generatorFor (demote @ki)
   pure t
 
 cauchy_ :: forall ty ki sz. (SingI sz, TensorConstraints ty ki sz)
         => Tensor ty ki sz -> Double -> Double -> IO (Tensor ty ki sz)
 cauchy_ t@(Tensor ptr _) m s = do
-  C.cauchy__mddg ptr (coerce m) (coerce s) =<< generatorFor (demote @ki)
+  C.cauchy__mddg ptr (coerce m) (coerce s) . pure =<< generatorFor (demote @ki)
   pure t
 
 logNormal_ :: forall ty ki sz. (SingI sz, TensorConstraints ty ki sz)
         => Tensor ty ki sz -> Double -> Double -> IO (Tensor ty ki sz)
 logNormal_ t@(Tensor ptr _) m s = do
-  C.log_normal__mddg ptr (coerce m) (coerce s) =<< generatorFor (demote @ki)
+  C.log_normal__mddg ptr (coerce m) (coerce s) . pure =<< generatorFor (demote @ki)
   pure t
 
 constant_ :: forall ty ki sz. (TensorConstraints ty ki sz)

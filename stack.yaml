@@ -1,0 +1,38 @@
+resolver: lts-18.13
+
+packages:
+- haskell-torch-tools
+- haskell-torch-cbindings
+- haskell-torch-imagemagick
+- haskell-torch-matio
+- haskell-torch-tensorboard-proto
+- simplify-nat-algebra-plugin
+- interpolateIO
+- default-type-plugin
+- haskell-torch
+- haskell-torch-models
+- haskell-torch-datasets
+- dataframe
+# for ihaskell integration
+- haskell-notebook-filter
+- ihaskell-matplotlib
+- gym-haskell
+- haskell-torch-examples
+
+extra-deps:
+  - git: https://github.com/abarbu/matplotlib-haskell
+    commit: 5c186cb5b9e80212c92c72a68e9ebbc260d413a8
+  - git: https://github.com/docopt/docopt.hs.git
+    commit: bdc4c679bf0185ab6c1895172f011193d9e9922c
+  - proto-lens-setup-0.4.0.5
+  - proto-lens-0.7.1.0
+  - proto-lens-runtime-0.7.0.1
+  - proto-lens-protoc-0.7.1.0
+  - git: https://github.com/abarbu/haskell-cpython
+    commit: 3c3c89acbc5a5fa6d60fc23a148f39eb330ecfac
+
+allow-newer: true
+
+nix:
+  enable: true
+  shell-file: shell.nix

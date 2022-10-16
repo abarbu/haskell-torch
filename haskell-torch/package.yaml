@@ -21,10 +21,7 @@ description:         Please see the README on Github at <https://github.com/abar
 dependencies:
 - base >= 4.7 && < 5
 
-_config: !include "../config.yaml"
-
 library:
-  <<: *pytorchdefaults
   source-dirs: src
   dependencies:
     - haskell-torch-cbindings >= 0.8.0.0
@@ -86,10 +83,14 @@ library:
     - docopt
     - default-type-plugin
     - simplify-nat-algebra-plugin
+    - temporary
+    - barbies
+    - distributive
+    - generics-sop
+    - vector-algorithms
 
 tests:
   doctest:
-    <<: *pytorchdefaults
     main: Doctest.hs
     source-dirs: test
     # main-is: Doctest.hs
@@ -97,8 +98,8 @@ tests:
     dependencies:
       - doctest
       - doctest-discover
+  # TODO
   # haskell-torch-test:
-  #   <<: *pytorchdefaults
   #   main:                Spec.hs
   #   source-dirs:         test
   #   dependencies:

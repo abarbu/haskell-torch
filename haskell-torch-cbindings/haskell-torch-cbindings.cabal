@@ -1,0 +1,67 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           haskell-torch-cbindings
+version:        0.8.0.0
+synopsis:       Bindings to the C PyTorch library for Haskell-Torch
+description:    Please see the README on Github at <https://github.com/abarbu/haskell-torch#readme>
+category:       AI
+homepage:       https://github.com/abarbu/haskell-torch
+bug-reports:    https://github.com/abarbu/haskell-torch/issues
+author:         Andrei Barbu
+maintainer:     andrei@0xab.com
+copyright:      2018 Andrei Barbu
+license:        BSD3
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/abarbu/haskell-torch
+
+flag cuda
+  description: If your pytorch is CUDA-enabled, you can set this
+  manual: True
+  default: False
+
+library
+  exposed-modules:
+      Torch.C.CUDA
+      Torch.C.Generator
+      Torch.C.Language
+      Torch.C.Scalar
+      Torch.C.Tensor
+      Torch.C.Types
+      Torch.C.Variable
+  other-modules:
+      Paths_haskell_torch_cbindings
+  hs-source-dirs:
+      src
+  extra-libraries:
+      stdc++
+      hdf5
+      c10
+      torch
+      torch_cpu
+  build-depends:
+      base >=4.7 && <5
+    , bytestring
+    , containers
+    , extra
+    , half
+    , ieee754
+    , inline-c
+    , inline-c-cpp
+    , safe-exceptions
+    , template-haskell
+    , text
+    , vector
+  if flag(cuda)
+    cpp-options: -DWITH_CUDA
+    extra-libraries:
+        torch_cuda
+  default-language: Haskell2010

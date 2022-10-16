@@ -62,6 +62,12 @@ textPeekCString cs = do
   bs <- BS.unsafePackCString cs
   return $! T.decodeUtf8 bs
 
+textPeekCString' :: CString -> IO Text
+textPeekCString' cs = do
+  s <- textPeekCString cs
+  free cs
+  pure s
+  
 withTextCString :: Text -> (CString -> IO a) -> IO a
 withTextCString t f = BS.useAsCString (T.encodeUtf8 t) f
 
@@ -397,7 +403,7 @@ is_leaf v = [C.exp|bool { $fptr-ptr:(Variable *v)->is_leaf() }|]
 
 -- This is not a memory leak, grad is cleaned up when the variable dies
 grad :: Coercible a (ForeignPtr CTensor) => a -> IO (ForeignPtr CTensor)
-grad v = newForeignPtr_ =<< [C.exp|Tensor *{ &$fptr-ptr:(Tensor *v)->grad() }|]
+grad v = newForeignPtr_ =<< [C.exp|const Tensor *{ &$fptr-ptr:(Tensor *v)->grad() }|]
 
 detach :: Coercible a (ForeignPtr CTensor) => a -> IO (ForeignPtr CVariable)
 detach v = newForeignPtr deleteVariable
@@ -514,7 +520,7 @@ jitModuleNumberOfSlots mod = [C.exp|int { $fptr-ptr:(JitScriptModule *mod)->num_
 jitModueToBackend mod backend = [C.exp|void { $fptr-ptr:(JitScriptModule *mod)->to(at::Device(static_cast<c10::DeviceType>($(int backend)), -1)) }|]
 
 jitModuleSlotName mod slotNr =
-  [C.exp|char *{ (char*)$fptr-ptr:(JitScriptModule *mod)->type()->getAttributeName($(int slotNr)).c_str() }|] >>= textPeekCString
+  [C.exp|char *{ strdup((char*)$fptr-ptr:(JitScriptModule *mod)->type()->getAttributeName($(int slotNr)).c_str()) }|] >>= textPeekCString'
 
 jitModuleSlotIsModule :: ForeignPtr CJitScriptModule -> CInt -> IO CBool
 jitModuleSlotIsModule mod slotNr = [C.exp|bool{ (int)$fptr-ptr:(JitScriptModule *mod)->type()->getAttribute($(int slotNr))->is_module() }|]

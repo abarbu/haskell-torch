@@ -1,5 +1,4 @@
 module Torch(module X) where
-import           Torch.Datasets as X
 import           Torch.Images as X
 import           Torch.Indexing as X
 import           Torch.Initialization as X
@@ -12,3 +11,5 @@ import           Torch.Tensor as X
 import           Torch.Tensorboard as X
 import           Torch.Types as X
 import           Torch.Visualization as X
+import           Torch.Datasets.Augmentation as X
+import           Torch.Datasets.Common as X

@@ -1,0 +1,439 @@
+diff --git a/compiler/main/Plugins.hs b/compiler/main/Plugins.hs
+index 25e69c15e5..581a599f48 100644
+--- a/compiler/main/Plugins.hs
++++ b/compiler/main/Plugins.hs
+@@ -24,6 +24,10 @@ module Plugins (
+       -- | Typechecker plugins allow plugins to provide evidence to the
+       -- typechecker.
+     , TcPlugin
++      -- ** Defaulting plugins
++      -- | Defaulting plugins can add candidate types to the defaulting
++      -- mechanism.
++    , DefaultingPlugin
+       -- ** Source plugins
+       -- | GHC offers a number of points where plugins can access and modify its
+       -- front-end (\"source\") representation. These include:
+@@ -89,6 +93,9 @@ data Plugin = Plugin {
+   , tcPlugin :: TcPlugin
+     -- ^ An optional typechecker plugin, which may modify the
+     -- behaviour of the constraint solver.
++  , defaultingPlugin :: DefaultingPlugin
++    -- ^ An optional typechecker plugin, which may modify the
++    -- behaviour of the constraint solver.
+   , holeFitPlugin :: HoleFitPlugin
+     -- ^ An optional plugin to handle hole fits, which may re-order
+     --   or change the list of valid hole fits and refinement hole fits.
+@@ -189,6 +196,7 @@ instance Monoid PluginRecompile where
+ 
+ type CorePlugin = [CommandLineOption] -> [CoreToDo] -> CoreM [CoreToDo]
+ type TcPlugin = [CommandLineOption] -> Maybe TcRnTypes.TcPlugin
++type DefaultingPlugin = [CommandLineOption] -> Maybe TcRnTypes.DefaultingPlugin
+ type HoleFitPlugin = [CommandLineOption] -> Maybe HoleFitPluginR
+ 
+ purePlugin, impurePlugin, flagRecompile :: [CommandLineOption] -> IO PluginRecompile
+@@ -207,6 +215,7 @@ defaultPlugin :: Plugin
+ defaultPlugin = Plugin {
+         installCoreToDos      = const return
+       , tcPlugin              = const Nothing
++      , defaultingPlugin      = const Nothing
+       , holeFitPlugin         = const Nothing
+       , dynflagsPlugin        = const return
+       , pluginRecompile       = impurePlugin
+diff --git a/compiler/typecheck/TcRnDriver.hs b/compiler/typecheck/TcRnDriver.hs
+index 822f522cb6..042389016e 100644
+--- a/compiler/typecheck/TcRnDriver.hs
++++ b/compiler/typecheck/TcRnDriver.hs
+@@ -169,7 +169,9 @@ tcRnModule hsc_env mod_sum save_rn_syntax
+               (text "Renamer/typechecker"<+>brackets (ppr this_mod))
+               (const ()) $
+    initTc hsc_env hsc_src save_rn_syntax this_mod real_loc $
+-          withTcPlugins hsc_env $ withHoleFitPlugins hsc_env $
++          withTcPlugins hsc_env $
++          withDefaultingPlugins hsc_env $
++          withHoleFitPlugins hsc_env $
+ 
+           tcRnModuleTcRnM hsc_env mod_sum parsedModule pair
+ 
+@@ -1849,7 +1851,8 @@ runTcInteractive :: HscEnv -> TcRn a -> IO (Messages, Maybe a)
+ -- Initialise the tcg_inst_env with instances from all home modules.
+ -- This mimics the more selective call to hptInstances in tcRnImports
+ runTcInteractive hsc_env thing_inside
+-  = initTcInteractive hsc_env $ withTcPlugins hsc_env $ withHoleFitPlugins hsc_env $
++  = initTcInteractive hsc_env $ withTcPlugins hsc_env $
++    withDefaultingPlugins hsc_env $ withHoleFitPlugins hsc_env $
+     do { traceTc "setInteractiveContext" $
+             vcat [ text "ic_tythings:" <+> vcat (map ppr (ic_tythings icxt))
+                  , text "ic_insts:" <+> vcat (map (pprBndr LetBind . instanceDFunId) ic_insts)
+@@ -2890,6 +2893,28 @@ withTcPlugins hsc_env m =
+ getTcPlugins :: DynFlags -> [TcRnMonad.TcPlugin]
+ getTcPlugins dflags = catMaybes $ mapPlugins dflags (\p args -> tcPlugin p args)
+ 
++withDefaultingPlugins :: HscEnv -> TcM a -> TcM a
++withDefaultingPlugins hsc_env m =
++  do let plugins = getDePlugins (hsc_dflags hsc_env)
++     case plugins of
++       [] -> m  -- Common fast case
++       _  -> do ev_binds_var <- newTcEvBinds
++                (plugins,stops) <- unzip `fmap` mapM (startPlugin ev_binds_var) plugins
++                -- This ensures that tcPluginStop is called even if a type
++                -- error occurs during compilation (Fix of #10078)
++                eitherRes <- tryM $ do
++                  updGblEnv (\e -> e { tcg_de_plugins = plugins }) m
++                mapM_ (flip runTcPluginM ev_binds_var) stops
++                case eitherRes of
++                  Left _ -> failM
++                  Right res -> return res
++  where
++  startPlugin ev_binds_var (DefaultingPlugin start fill stop) =
++    do s <- runTcPluginM start ev_binds_var
++       return (fill s, stop s)
++
++getDePlugins :: DynFlags -> [TcRnMonad.DefaultingPlugin]
++getDePlugins dflags = catMaybes $ mapPlugins dflags (\p args -> defaultingPlugin p args)
+ 
+ withHoleFitPlugins :: HscEnv -> TcM a -> TcM a
+ withHoleFitPlugins hsc_env m =
+diff --git a/compiler/typecheck/TcRnMonad.hs b/compiler/typecheck/TcRnMonad.hs
+index b6910b7f3d..8e5a50aa14 100644
+--- a/compiler/typecheck/TcRnMonad.hs
++++ b/compiler/typecheck/TcRnMonad.hs
+@@ -314,6 +314,7 @@ initTc hsc_env hsc_src keep_rn_syntax mod loc do_this
+                 tcg_safeInfer      = infer_var,
+                 tcg_dependent_files = dependent_files_var,
+                 tcg_tc_plugins     = [],
++                tcg_de_plugins     = [],
+                 tcg_hf_plugins     = [],
+                 tcg_top_loc        = loc,
+                 tcg_static_wc      = static_wc_var,
+diff --git a/compiler/typecheck/TcRnTypes.hs b/compiler/typecheck/TcRnTypes.hs
+index f58f285fb6..7ac61c8206 100644
+--- a/compiler/typecheck/TcRnTypes.hs
++++ b/compiler/typecheck/TcRnTypes.hs
+@@ -77,6 +77,9 @@ module TcRnTypes(
+         TcPluginM, runTcPluginM, unsafeTcPluginTcM,
+         getEvBindsTcPluginM,
+ 
++        -- Defaulting plugin
++        DefaultingPlugin(..), FillDefaulting, DefaultingPluginResult,
++
+         -- Role annotations
+         RoleAnnotEnv, emptyRoleAnnotEnv, mkRoleAnnotEnv,
+         lookupRoleAnnot, getRoleAnnots
+@@ -593,6 +596,8 @@ data TcGblEnv
+ 
+         tcg_tc_plugins :: [TcPluginSolver],
+         -- ^ A list of user-defined plugins for the constraint solver.
++        tcg_de_plugins :: [FillDefaulting],
++        -- ^ A list of user-defined plugins for the constraint solver.
+         tcg_hf_plugins :: [HoleFitPlugin],
+         -- ^ A list of user-defined plugins for hole fit suggestions.
+ 
+@@ -1700,6 +1705,23 @@ data TcPluginResult
+     -- The second field contains new work, that should be processed by
+     -- the constraint solver.
+ 
++-- | A plugin for controlling defaulting.
++type FillDefaulting =  WantedConstraints -> TcPluginM DefaultingPluginResult
++
++data DefaultingPlugin = forall s. DefaultingPlugin
++  { dePluginInit :: TcPluginM s
++    -- ^ Initialize plugin, when entering type-checker.
++  , dePluginRun :: s -> FillDefaulting
++    -- ^ Default some types
++  , dePluginStop :: s -> TcPluginM ()
++   -- ^ Clean up after the plugin, when exiting the type-checker.
++  }
++
++-- | Propose the following types to fill this type variable in the selected
++-- constraints.
++type DefaultingPluginResult = [([Type],(TcTyVar,[Ct]))]
++
++
+ {- *********************************************************************
+ *                                                                      *
+                         Role annotations
+diff --git a/compiler/typecheck/TcSimplify.hs b/compiler/typecheck/TcSimplify.hs
+index ab89d080b4..64917b50c5 100644
+--- a/compiler/typecheck/TcSimplify.hs
++++ b/compiler/typecheck/TcSimplify.hs
+@@ -2555,6 +2555,9 @@ subtle than we'd realised at first.  See #14584.
+ *********************************************************************************
+ -}
+ 
++getDePlugins :: TcS [FillDefaulting]
++getDePlugins = do { tcg_env <- TcS.getGblEnv; return (tcg_de_plugins tcg_env) }
++
+ applyDefaultingRules :: WantedConstraints -> TcS Bool
+ -- True <=> I did some defaulting, by unifying a meta-tyvar
+ -- Input WantedConstraints are not necessarily zonked
+@@ -2566,6 +2569,26 @@ applyDefaultingRules wanteds
+   = do { info@(default_tys, _) <- getDefaultInfo
+        ; wanteds               <- TcS.zonkWC wanteds
+ 
++       ; plugins <- getDePlugins
++
++       -- TODO Keep track of which variables were already defaulted, don't do it twice!
++       ; plugin_defaulted <- if null plugins then return [] else
++           do {
++             ; traceTcS "defaultingPlugins {" (ppr wanteds)
++             ; defaultedGroups <-
++                 mapM (\p -> do { groups <- runTcPluginTcS (p wanteds)
++                               ; defaultedGroups <-
++                                   filterM (\(tys,group) -> disambigGroup tys group) groups
++                               ; traceTcS "defaultingPlugin " $ ppr defaultedGroups
++                               ; case defaultedGroups of
++                                   [] -> return False
++                                   _  -> return True
++                               })
++                 plugins
++             ; traceTcS "defaultingPlugins }" (ppr defaultedGroups)
++             ; return defaultedGroups
++             }
++
+        ; let groups = findDefaultableGroups info wanteds
+ 
+        ; traceTcS "applyDefaultingRules {" $
+@@ -2577,7 +2600,7 @@ applyDefaultingRules wanteds
+ 
+        ; traceTcS "applyDefaultingRules }" (ppr something_happeneds)
+ 
+-       ; return (or something_happeneds) }
++       ; return $ or something_happeneds || or plugin_defaulted }
+ 
+ findDefaultableGroups
+     :: ( [Type]
+@@ -2668,7 +2691,7 @@ disambigGroup (default_ty:default_tys) group@(the_tv, wanteds)
+       = do { lcl_env <- TcS.getLclEnv
+            ; tc_lvl <- TcS.getTcLevel
+            ; let loc = mkGivenLoc tc_lvl UnkSkol lcl_env
+-           ; wanted_evs <- mapM (newWantedEvVarNC loc . substTy subst . ctPred)
++           ; wanted_evs <- mapM (newWantedNC loc . substTy subst . ctPred)
+                                 wanteds
+            ; fmap isEmptyWC $
+              solveSimpleWanteds $ listToBag $
+diff --git a/docs/users_guide/extending_ghc.rst b/docs/users_guide/extending_ghc.rst
+index 4dfb4e4504..7333cbc49e 100644
+--- a/docs/users_guide/extending_ghc.rst
++++ b/docs/users_guide/extending_ghc.rst
+@@ -1174,6 +1174,221 @@ The output is as follows:
+       |     ^^^^^^^^^^^^^
+ 
+ 
++.. _defaulting-plugins:
++
++Defaulting plugins
++~~~~~~~~~~~~~~~~~~
++
++Defaulting plugins are called when ambiguous variables might otherwise cause
++errors, in the same way as the defaulting mechanism.
++
++Your defaulting plugin can propose potential ways to fill an ambiguous variable
++according to whatever criteria you would like.
++
++GHC will verify that those proposals will not lead to type errors in a context
++that you declare.
++
++Using hole-fit plugins, you can extend the behavior of valid hole fit
++suggestions to use e.g. Hoogle or other external tools to find and/or synthesize
++valid hole fits, with the same information about the typed-hole that GHC uses.
++
++There are two access points are bundled together for defining hole fit plugins,
++namely a candidate plugin and a fit plugin, for modifying the candidates to be
++checked and fits respectively.
++
++
++::
++
++    -- | A plugin for controlling defaulting.
++    type FillDefaulting =  WantedConstraints -> TcPluginM DefaultingPluginResult
++
++    data DefaultingPlugin = forall s. DefaultingPlugin
++      { dePluginInit :: TcPluginM s
++	-- ^ Initialize plugin, when entering type-checker.
++      , dePluginRun :: s -> FillDefaulting
++	-- ^ Default some types
++      , dePluginStop :: s -> TcPluginM ()
++       -- ^ Clean up after the plugin, when exiting the type-checker.
++      }
++
++    -- | Propose the following types to fill this type variable in the selected
++    -- constraints.
++    type DefaultingPluginResult = [([Type],(TcTyVar,[Ct]))]
++
++
++Your plugin gets a combination of wanted constraints which can be most easily
++broken down into simple wanted constraints with ``approximateWC``. The result is
++a ``DefaultingPluginResult`` a list of types that should be filled in for a
++given type variable that is ambiguous in a given context. GHC will check that if
++one of your proposals matches the given context and accept it. The most robust
++context to provide is just the list of all wanted constraints that mention the
++variable you are defaulting. If you leave out a constraint, your default will be
++accepted, and then result in a type checker error --- a useful way of forcing a
++default and reporting errors to the user.
++
++Defaulting plugin example
++^^^^^^^^^^^^^^^^^^^^^^^^^
++
++This plugin defaults lifted types. For example, if you would like GHC to guess
++which Nat, type level number, might fit if none is specified, you can use the
++plugin to specify a list of candidates.
++
++::
++    {-# LANGUAGE MultiParamTypeClasses, KindSignatures, FlexibleInstances, DataKinds, PatternSynonyms, StandaloneDeriving, GeneralizedNewtypeDeriving, PolyKinds #-}
++    module DefaultLifted(DefaultType,plugin) where
++    import GhcPlugins
++    import TcRnTypes
++    import Constraint
++    import TcPluginM
++    import qualified Inst
++    import InstEnv
++    import TcSimplify (approximateWC)
++    import qualified  Finder
++    import Panic      (panicDoc)
++    import Data.List
++    import TcType
++    import qualified Data.Map as M
++    import TyCoRep (Type(..))
++    import TyCon (TyCon(..))
++    import Control.Monad (liftM2)
++    import GHC.TypeLits
++
++    class DefaultType x (y :: x)
++
++    instance Eq Type where
++      (==) = eqType
++    instance Ord Type where
++      compare = nonDetCmpType
++    instance Semigroup (TcPluginM [a]) where
++      (<>) = liftM2 (++)
++    instance Monoid (TcPluginM [a]) where
++      mempty = pure mempty
++
++    plugin :: Plugin
++    plugin = defaultPlugin {
++      defaultingPlugin = install,
++      pluginRecompile = purePlugin
++      }
++
++    install args = Just $ DefaultingPlugin { dePluginInit = initialize
++					   , dePluginRun  = run
++					   , dePluginStop = stop
++					   }
++
++    pattern FoundModule :: Module -> FindResult
++    pattern FoundModule a <- Found _ a
++    fr_mod :: a -> a
++    fr_mod = id
++
++    lookupModule :: ModuleName -- ^ Name of the module
++		 -> TcPluginM Module
++    lookupModule mod_nm = do
++      hsc_env <- TcPluginM.getTopEnv
++      found_module <- TcPluginM.tcPluginIO $ Finder.findPluginModule hsc_env mod_nm
++      case found_module of
++	FoundModule h -> return (fr_mod h)
++	_          -> do
++	  found_module' <- TcPluginM.findImportedModule mod_nm $ Just $ fsLit "this"
++	  case found_module' of
++	    FoundModule h -> return (fr_mod h)
++	    _          -> panicDoc "Unable to resolve module looked up by plugin: "
++				   (ppr mod_nm)
++
++    data PluginState = PluginState { defaultClassName :: Name }
++
++    -- | Find a 'Name' in a 'Module' given an 'OccName'
++    lookupName :: Module -> OccName -> TcPluginM Name
++    lookupName md occ = lookupOrig md occ
++
++    solveDefaultType :: PluginState -> [Ct] -> TcPluginM DefaultingPluginResult
++    solveDefaultType _     []      = return []
++    solveDefaultType state wanteds = do
++      envs <- getInstEnvs
++      insts <- classInstances envs <$> tcLookupClass (defaultClassName state)
++      let defaults = foldl' (\m inst ->
++			       case is_tys inst of
++				 [matchty, replacety] ->
++				   M.insertWith (++) matchty [replacety] m) M.empty insts
++      let groups =
++	    foldl' (\m wanted ->
++		      foldl' (\m var -> M.insertWith (++) var [wanted] m)
++			     m
++			     (filter (isVariableDefaultable defaults) $ tyCoVarsOfCtList wanted))
++		   M.empty wanteds
++      M.foldMapWithKey (\var cts ->
++			case M.lookup (tyVarKind var) defaults of
++			  Nothing -> error "Bug, we already checked that this variable has a default"
++			  Just deftys -> do
++			    pure [(deftys, (var, cts))])
++	groups
++      where isVariableDefaultable defaults v = isAmbiguousTyVar v && M.member (tyVarKind v) defaults
++
++    lookupDefaultTypes :: TcPluginM PluginState
++    lookupDefaultTypes = do
++	md   <- lookupModule (mkModuleName "DefaultLifted")
++	name <- lookupName md (mkTcOcc "DefaultType")
++	pure $ PluginState { defaultClassName = name }
++
++    initialize = do
++      lookupDefaultTypes
++
++    run s ws = do
++      solveDefaultType s (ctsElts $ approximateWC False ws)
++
++    stop _ = do
++      return ()
++
++You can then compile
++
++::
++
++    {-# LANGUAGE MultiParamTypeClasses, KindSignatures, FlexibleInstances, DataKinds, PolyKinds, RankNTypes, AllowAmbiguousTypes, TypeOperators, TypeFamilies, ScopedTypeVariables #-}
++    {-# OPTIONS_GHC -fplugin DefaultLifted -fwarn-type-defaults #-}
++
++    -- Tests defaulting plugins
++    module Main where
++    import GHC.TypeLits
++    import Data.Proxy
++    import DefaultLifted
++
++    instance DefaultType Nat 4
++    instance DefaultType Nat 2
++    instance DefaultType Nat 0
++
++    q :: forall (a :: Nat). (KnownNat a) => Integer
++    q = natVal (Proxy :: Proxy a)
++
++    w :: forall (a :: Nat). (KnownNat a, 2 <= a) => Integer
++    w = natVal (Proxy :: Proxy a)
++
++    main :: IO ()
++    main = do
++      print $ q + w
++
++You will get the following warning for type defaulting
++
++.. code-block:: none
++
++    Main.hs:22:11: warning: [-Wtype-defaults (in -Wall)]
++         Defaulting the following constraint to type ‘0’
++            KnownNat a0 arising from a use of ‘q’
++         In the first argument of ‘(+)’, namely ‘q’
++          In the second argument of ‘($)’, namely ‘q + w’
++          In a stmt of a 'do' block: print $ q + w
++
++    Main.hs:22:15: warning: [-Wtype-defaults (in -Wall)]
++         Defaulting the following constraints to type ‘2’
++            ((2 <=? a0) ~ 'True)
++              arising from a use of ‘w’ at Main.hs:22:15
++            (KnownNat a0)
++              arising from a use of ‘w’ at Main.hs:22:15
++         In the second argument of ‘(+)’, namely ‘w’
++          In the second argument of ‘($)’, namely ‘q + w’
++          In a stmt of a 'do' block: print $ q + w
++
++
++And at runtime the output will be 2.
++
+ 
+ .. _plugin_recompilation:
+ 

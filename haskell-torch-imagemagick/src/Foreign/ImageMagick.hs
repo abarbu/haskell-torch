@@ -36,7 +36,6 @@ import qualified Language.C.Types                 as C
 
 C.context imageMagickCtx
 
-C.verbatim "#define MAGICKCORE_QUANTUM_DEPTH 16"
 C.include "<MagickWand/MagickWand.h>"
 
 C.verbatim "void delete_magickwand(MagickWand *w) { DestroyMagickWand(w); }"

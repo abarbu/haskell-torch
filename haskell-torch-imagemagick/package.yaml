@@ -18,10 +18,7 @@ description:         Please see the README on Github at <https://github.com/abar
 dependencies:
 - base >= 4.7 && < 5
 
-_config: !include "../config.yaml"
-
 library:
-  <<: *pytorchdefaults
   source-dirs: src
   extra-libraries:
     - MagickWand-7.Q16HDRI
@@ -43,3 +40,8 @@ library:
     - filepath
     - ieee754
     - template-haskell
+  cpp-options:
+    - -DMAGICKCORE_QUANTUM_DEPTH=16
+    - -DMAGICKCORE_HDRI_ENABLE=0
+  include-dirs:
+    - /nix/store/crrwcbzgbbcjivf36kmminsmv9a0jv7v-imagemagick-7.1.0-4-dev/include/ImageMagick

@@ -1,0 +1,98 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           haskell-torch-models
+version:        0.8.0.0
+synopsis:       Deep learning in Haskell on top of Torch and PyTorch
+description:    Please see the README on Github at <https://github.com/abarbu/haskell-torch#readme>
+category:       AI
+homepage:       https://github.com/abarbu/haskell-torch
+bug-reports:    https://github.com/abarbu/haskell-torch/issues
+author:         Andrei Barbu
+maintainer:     andrei@0xab.com
+copyright:      2018 Andrei Barbu
+license:        BSD3
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/abarbu/haskell-torch
+
+library
+  exposed-modules:
+      Torch.Models.Vision.AlexNet
+      Torch.Models.Vision.ResNet
+      Torch.Models.Vision.VGG19
+  other-modules:
+      Paths_haskell_torch_models
+  hs-source-dirs:
+      src
+  build-depends:
+      aeson
+    , array
+    , base >=4.7 && <5
+    , binary
+    , bytestring
+    , containers
+    , data-default
+    , default-type-plugin
+    , directory
+    , docopt
+    , extra
+    , filepath
+    , generics-eot
+    , ghc-typelits-knownnat
+    , ghc-typelits-natnormalise
+    , half
+    , hashable
+    , hashtables
+    , haskell-src-exts
+    , haskell-src-meta
+    , haskell-torch
+    , haskell-torch-datasets
+    , haskell-torch-imagemagick
+    , haskell-torch-matio
+    , haskell-torch-tensorboard-proto
+    , hostname
+    , ieee754
+    , interpolateIO
+    , matplotlib
+    , megaparsec
+    , microlens
+    , monad-control
+    , monad-logger
+    , monad-loops
+    , mtl
+    , parser-combinators
+    , pipes
+    , pipes-aeson
+    , pipes-bytestring
+    , pipes-concurrency
+    , pipes-csv
+    , pipes-extras
+    , pipes-group
+    , pipes-parse
+    , pipes-safe
+    , proto-lens
+    , random
+    , safe-exceptions
+    , shelly
+    , simplify-nat-algebra-plugin
+    , singletons
+    , statistics
+    , string-qq
+    , syb
+    , template-haskell
+    , temporary
+    , text
+    , time
+    , unix
+    , vector
+    , yaml
+    , zlib
+  default-language: Haskell2010

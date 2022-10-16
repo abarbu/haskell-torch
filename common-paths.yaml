@@ -1,0 +1,4 @@
+include-dirs:
+  - /nix/store/crrwcbzgbbcjivf36kmminsmv9a0jv7v-imagemagick-7.1.0-4-dev/include/ImageMagick
+extra-lib-dirs:
+  - /nix/store/agp5fqd06czyd21ivxw6qxm4xh94c8sc-imagemagick-7.1.0-4/lib/

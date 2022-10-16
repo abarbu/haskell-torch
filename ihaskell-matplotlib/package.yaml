@@ -1,0 +1,28 @@
+name:                ihaskell-matplotlib
+version:             0.8.0.0
+github:              "abarbu/haskell-torch"
+license:             BSD3
+author:              "Andrei Barbu"
+maintainer:          "andrei@0xab.com"
+copyright:           "2018 Andrei Barbu"
+homepage:            https://github.com/abarbu/haskell-torch
+bug-reports:         https://github.com/abarbu/haskell-torch/issues
+category:            AI
+synopsis:            Using matplotlib with IHaskell
+
+extra-source-files:
+- README.md
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on Github at <https://github.com/abarbu/haskell-torch#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs: .
+  dependencies:
+    - matplotlib
+    - ihaskell >= 0.6.2

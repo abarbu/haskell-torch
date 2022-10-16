@@ -1,0 +1,11 @@
+--- a/nbconvert/preprocessors/csshtmlheader.py	1969-12-31 19:00:01.000000000 -0500
++++ b/nbconvert/preprocessors/csshtmlheader.py	2021-11-03 11:57:05.270846344 -0400
+@@ -32,7 +32,7 @@
+ 
+     style = Union([Unicode('default'), Type(klass=Style)],
+                   help='Name of the pygments style to use',
+-                  default_value=JupyterStyle
++                  default_value='vs'
+     ).tag(config=True)
+ 
+     def __init__(self, *pargs, **kwargs):
